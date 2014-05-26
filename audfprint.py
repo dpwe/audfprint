@@ -192,19 +192,51 @@ def landmarks2hashes(landmarks):
                  | (dtime & dtmask)) ) 
              for time, bin1, bin2, dtime in landmarks ]
 
+import hash_table
 
-test = True
+def ingest(ht, filename):
+    """ Read an audio file and add it to the database
+    :params:
+      ht : HashTable object
+        the hash table to add to
+      filename : str
+        name of the soundfile to add
+    :returns:
+      dur : float
+        the duration of the track
+      nhashes : int
+        the number of hashes it mapped into
+    """
+    targetsr = 11025
+    d, sr = librosa.load(filename, sr=targetsr)
+    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr)))
+    ht.store(filename, hashes)
+    return (len(d)/float(sr), len(hashes))
+
+import glob, time
+
+def glob2hashtable(pattern):
+    """ Build a hash table from the files matching a glob pattern """
+    ht = hash_table.HashTable()
+    filelist = glob.glob(pattern)
+    initticks = time.clock()
+    totdur = 0.0
+    tothashes = 0
+    for file in filelist:
+        print "ingesting ", file, " ..."
+        dur, nhash = ingest(ht, file)
+        totdur += dur
+        tothashes += nhash
+    elapsedtime = time.clock() - initticks
+    print "Added",tothashes,"(",tothashes/float(totdur),"hashes/sec) at ", elapsedtime/totdur, "x RT"
+    return ht
+
+test = False
 if test:
     fn = '/Users/dpwe/Downloads/carol11k.wav'
-    d, sr = librosa.load(fn, sr=11025)
-    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d[:30*sr], sr)))
-
-    print len(hashes)
-    for hash in hashes[:40]:
-        print hash
-
-    import hash_table
     ht = hash_table.HashTable()
-    ht.store(fn, hashes)
+
+    ingest(ht, fn)
+
     ht.save('httest.pickle', {'version': 20140525})
 

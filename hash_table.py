@@ -84,15 +84,18 @@ class HashTable:
         return idtimelist
 
     def get_hits(self, hashes):
-        """ Return a list of (id, time) pairs associated with each element in hashes """
-        idtimelist = []
-        for hash in hashes:
-            idtimelist += self.get_entry(hash)
-        return idtimelist
+        """ Return a list of (id, delta_time) pairs associated with each element in hashes list of (time, hash) """
+        iddtimelist = []
+        for time, hash in hashes:
+            idtimelist = [(id, rtime-time) 
+                          for id, rtime in self.get_entry(hash)]
+            iddtimelist += idtimelist
+        return iddtimelist
 
     def save(self, name, params=[]):
         """ Save hash table to file <name>, including optional addition params """
         self.params = params
+        self.version = 20140525
         with open(name, 'w') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
@@ -112,3 +115,7 @@ class HashTable:
         self.hashesperid = temp.hashesperid
         self.dirty = False
         return params
+
+    def totalhashes(self):
+        """ Return the total count of hashesh stored in the table """
+        return np.sum(self.counts)
