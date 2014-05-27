@@ -122,8 +122,8 @@ def find_peaks(d, sr, density=None):
     (srows, scols) = np.shape(S)
     sthresh = spreadpeaksinvector(np.max(S[:,:np.minimum(10, scols)],axis=1), 
                                   f_sd)
-    # Store sthresh at each column, for debug
-    thr = np.zeros((srows, scols))
+    ## Store sthresh at each column, for debug
+    #thr = np.zeros((srows, scols))
     peaks = np.zeros((srows, scols))
     for col in range(scols):
         Scol = S[:, col]
@@ -144,7 +144,7 @@ def find_peaks(d, sr, density=None):
                     sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
                                           base=sthresh, width=f_sd)
                     peaks[peakpos, col] = 1
-        thr[:, col] = sthresh
+        #thr[:, col] = sthresh
         sthresh *= a_dec
 
     # Backwards filter to prune peaks
