@@ -3,6 +3,8 @@ audfprint
 
 Audio landmark-based fingerprinting.  
 
+Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt
+
 ```
 Create a new fingerprint dbase with new, 
 append new files to an existing database with add, 
