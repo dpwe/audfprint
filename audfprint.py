@@ -38,8 +38,12 @@ def locmax(x, indices=False):
         if indices=True, return the indices of the True values instead 
         of the boolean vector. 
     """
-    nbr = np.greater_equal(np.r_[x, x[-1]-1], np.r_[x[0], x])
     # x[-1]-1 means last value can be a peak
+    #nbr = np.greater_equal(np.r_[x, x[-1]-1], np.r_[x[0], x])
+    # the np.r_ was killing us, so try an optimization...
+    nbr = np.zeros(len(x)+1, dtype=bool)
+    nbr[0] = True
+    nbr[1:-1] = np.greater_equal(x[1:], x[:-1])
     maxmask = (nbr[:-1] & ~nbr[1:])
     if indices:
         return np.nonzero(maxmask)[0]
@@ -53,6 +57,11 @@ def spreadpeaksinvector(vector, width=4.0):
     npts = len(vector)
     peaks = locmax(vector, indices=True)
     return spreadpeaks(zip(peaks, vector[peaks]), npoints=npts, width=width)
+
+# optimization: cache pre-calculated Gaussian profile
+__sp_width = None
+__sp_len = None
+__sp_vals = []
 
 def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
     """ Generate a vector consisting of the max of a set of Gaussian bumps
@@ -73,9 +82,19 @@ def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
         Y = np.zeros(npoints)
     else:
         Y = np.copy(base)
-    binvals = np.arange(len(Y))
+        npoints = len(Y)
+        #binvals = np.arange(len(Y))
+        #for pos, val in peaks:
+        #   Y = np.maximum(Y, val*np.exp(-0.5*(((binvals - pos)/float(width))**2)))
+    global __sp_width, __sp_len, __sp_vals
+    if width != __sp_width or npoints != __sp_len:
+        # Need to calculate new vector
+        __sp_width = width
+        __sp_len = npoints
+        __sp_vals = np.exp(-0.5*((np.arange(-npoints, npoints+1)/float(width))**2))
     for pos, val in peaks:
-        Y = np.maximum(Y, val*np.exp(-0.5*(((binvals - pos)/float(width))**2)))
+        Y = np.maximum(Y, val*__sp_vals[np.arange(npoints) + npoints - pos])
+    
     return Y
 
 def find_peaks(d, sr, density=None):
@@ -332,7 +351,7 @@ def main(argv):
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
-    print "Added", tothashes, \
+    print "Added", tothashes, "hashes", \
           "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
           "at %.3f" % (elapsedtime/totdur), "x RT"
     if ht.dirty:
