@@ -261,6 +261,8 @@ Options:
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
   -l, --list                      Input files are lists, not audio
+  --version                       Report version number
+  --help                          Print this message
 """
 
 __version__ = 20130527
