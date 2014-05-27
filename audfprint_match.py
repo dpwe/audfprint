@@ -57,7 +57,7 @@ def match_file(ht, filename):
     return match_hashes(ht, hq)
 
 
-dotest = True
+dotest = False
 if dotest:
     pat = '/Users/dpwe/projects/shazam/Nine_Lives/*mp3'
     qry = 'query.mp3'

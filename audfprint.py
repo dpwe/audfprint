@@ -130,7 +130,7 @@ def find_peaks(d, sr):
     for col in range(scols, 0, -1):
         pkposs = np.nonzero(peaks[:, col-1])[0]
         peakvals = S[pkposs, col-1]
-        for val, peakpos in sorted(zip(peakvals, pkposs)):
+        for val, peakpos in sorted(zip(peakvals, pkposs), reverse=True):
             if val >= sthresh[peakpos]:
                 # Setup the threshold
                 sthresh = spreadpeaks([(peakpos, val)], base=sthresh, 
@@ -222,8 +222,8 @@ def glob2hashtable(pattern):
     initticks = time.clock()
     totdur = 0.0
     tothashes = 0
-    for file in filelist:
-        print "ingesting ", file, " ..."
+    for ix, file in enumerate(filelist):
+        print time.ctime(), "ingesting #", ix, ":", file, " ..."
         dur, nhash = ingest(ht, file)
         totdur += dur
         tothashes += nhash
