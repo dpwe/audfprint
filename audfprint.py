@@ -330,7 +330,7 @@ def main(argv):
         # Load existing
         ht = hash_table.HashTable(dbasename)
 
-    if args['match']:
+    if cmd == 'match':
         # Running query
         for qry in filenames(files, listflag):
             rslts = audfprint_match.match_file(ht, qry, density=density)
