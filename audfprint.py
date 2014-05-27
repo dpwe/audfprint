@@ -296,10 +296,12 @@ def main(argv):
     t_hop = 0.02322
     for qry in filenames(args['<file>'], args['--list']):
       rslts = audfprint_match.match_file(ht, qry)
-      print "Matched", qry, "as", ht.names[rslts[0][0]], \
-            "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
-            "with", rslts[0][1], "of", rslts[0][3], "hashes"
-
+      if len(rslts):
+          print "Matched", qry, "as", ht.names[rslts[0][0]], \
+                "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
+                "with", rslts[0][1], "of", rslts[0][3], "hashes"
+      else:
+          print "NO MATCH for", qry
 
   else:
     # Adding files - command was 'new' or 'add'

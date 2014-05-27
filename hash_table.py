@@ -86,22 +86,14 @@ class HashTable:
 
     def get_entry(self, hash):
         """ Return the list of (id, time) entries associate with the given hash"""
-        idtimelist = []
-        for slot in xrange(self.counts[hash]):
-            val = self.table[hash, slot]
-            time = int(val % self.maxtime)
-            id = int(val / self.maxtime)
-            idtimelist.append( (id, time) )
-        return idtimelist
+        return [ ( int(val / self.maxtime), int(val % self.maxtime) )
+                 for val 
+                   in self.table[hash, :min(self.depth, self.counts[hash])] ]
 
     def get_hits(self, hashes):
         """ Return a list of (id, delta_time) pairs associated with each element in hashes list of (time, hash) """
-        iddtimelist = []
-        for time, hash in hashes:
-            idtimelist = [(id, rtime-time) 
-                          for id, rtime in self.get_entry(hash)]
-            iddtimelist += idtimelist
-        return iddtimelist
+        return [ (id, rtime-time) for time, hash in hashes
+                                     for id, rtime in self.get_entry(hash)]
 
     def save(self, name, params=[]):
         """ Save hash table to file <name>, including optional addition params """

@@ -48,11 +48,15 @@ def match_file(ht, filename):
     t_win = 0.04644
     win = int(np.round(sr * t_win))
     qwin = win/4
-    hq = audfprint.landmarks2hashes(audfprint.peaks2landmarks(audfprint.find_peaks(d, sr)))
-    hq += audfprint.landmarks2hashes(audfprint.peaks2landmarks(audfprint.find_peaks(d[qwin:], sr)))
-    hq += audfprint.landmarks2hashes(audfprint.peaks2landmarks(audfprint.find_peaks(d[2*qwin:], sr)))
-    hq += audfprint.landmarks2hashes(audfprint.peaks2landmarks(audfprint.find_peaks(d[3*qwin:], sr)))
-    print "Analyzed",filename,"to",len(hq),"hashes"
+    hq = audfprint.landmarks2hashes(
+             audfprint.peaks2landmarks(audfprint.find_peaks(d, sr)))
+    hq += audfprint.landmarks2hashes(
+             audfprint.peaks2landmarks(audfprint.find_peaks(d[qwin:], sr)))
+    hq += audfprint.landmarks2hashes(
+             audfprint.peaks2landmarks(audfprint.find_peaks(d[2*qwin:], sr)))
+    hq += audfprint.landmarks2hashes(
+             audfprint.peaks2landmarks(audfprint.find_peaks(d[3*qwin:], sr)))
+    #print "Analyzed",filename,"to",len(hq),"hashes"
     # Run query
     return match_hashes(ht, hq)
 
