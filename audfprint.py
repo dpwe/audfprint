@@ -209,6 +209,8 @@ def ingest(ht, filename):
     """
     targetsr = 11025
     d, sr = librosa.load(filename, sr=targetsr)
+    # librosa.load on mp3 files prepents 396 samples compared 
+    # to Matlab audioread
     hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr)))
     ht.store(filename, hashes)
     return (len(d)/float(sr), len(hashes))
@@ -235,8 +237,87 @@ test = False
 if test:
     fn = '/Users/dpwe/Downloads/carol11k.wav'
     ht = hash_table.HashTable()
-
     ingest(ht, fn)
+    ht.save('httest.pklz')
 
-    ht.save('httest.pickle', {'version': 20140525})
 
+# Command line interface
+
+import audfprint_match
+import docopt
+import time 
+
+usage = """
+Audio landmark-based fingerprinting.  
+Create a new fingerprint dbase with new, 
+append new files to an existing database with add, 
+or identify noisy query excerpts with match.
+
+Usage: audfprint (new | add | match) (-d <dbase> | --dbase <dbase>) [options] <file>...
+
+Options:
+  -n <dens>, --density <dens>     Target hashes per second [default: 7.0]
+  -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
+  -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
+  -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
+  -l, --list                      Input files are lists, not audio
+"""
+
+__version__ = 20130527
+
+def filenames(filelist, listflag):
+  """ Iterator to yeild all the filenames, possibly interpreting them as list files """
+  if not listflag:
+    for filename in filelist:
+      yield filename
+  else:
+    for listfilename in filelist:
+      with open(listfilename, 'r') as f:
+        for filename in f:
+          yield filename.rstrip('\n')
+
+
+def main(argv):
+  args = docopt.docopt(usage, version=__version__) 
+
+  if args['new']:
+    # Create a new hash table
+    ht = hash_table.HashTable(hashbits=int(args['--hashbits']), 
+                              depth=int(args['--bucketsize']),
+                              maxtime=int(args['--maxtime']))
+  else:
+    # Load existing
+     ht = hash_table.HashTable(filename=args['<dbase>'])
+
+  if args['match']:
+    # Running query
+    t_hop = 0.02322
+    for qry in filenames(args['<file>'], args['--list']):
+      rslts = audfprint_match.match_file(ht, qry)
+      print "Matched", qry, "as", ht.names[rslts[0][0]], \
+            "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
+            "with", rslts[0][1], "of", rslts[0][3], "hashes"
+
+
+  else:
+    # Adding files - command was 'new' or 'add'
+    initticks = time.clock()
+    totdur = 0
+    tothashes = 0
+    for ix, file in enumerate(filenames(args['<file>'], args['--list'])):
+        print time.ctime(), "ingesting #", ix, ":", file, " ..."
+        dur, nhash = ingest(ht, file)
+        totdur += dur
+        tothashes += nhash
+    elapsedtime = time.clock() - initticks
+    print "Added", tothashes, \
+          "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
+          "at %.3f" % (elapsedtime/totdur), "x RT"
+    if ht.dirty:
+        ht.save(args['<dbase>'])
+
+
+# Run the main function if called from the command line
+if __name__ == "__main__":
+    import sys
+    main(sys.argv)

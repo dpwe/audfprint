@@ -10,7 +10,7 @@ used for the audfprint fingerprinter.
 import numpy as np
 import random
 import cPickle as pickle
-import gzip
+import os, gzip
 import scipy.io
 
 class HashTable:
@@ -27,15 +27,16 @@ class HashTable:
     # Earliest acceptable version
     HT_COMPAT_VERSION = 20140525
 
-    def __init__(self, size=1048576, depth=100, maxtime=16384, name=None):
+    def __init__(self, hashbits=20, depth=100, maxtime=16384, filename=None):
         """ allocate an empty hash table of the specified size """
-        if name is not None:
-            self.load(name)
+        if filename is not None:
+            self.load(filename)
         else:
-            self.size = size
+            self.hashbits = hashbits
             self.depth = depth
             self.maxtime = maxtime
             # allocate the big table
+            size = 2**hashbits
             self.table = np.zeros( (size, depth), dtype=np.uint32 )
             # keep track of number of entries in each list
             self.counts = np.zeros( size, dtype=np.int32 )
@@ -58,9 +59,12 @@ class HashTable:
             # we were passed in a numerical id
             id = name
         # Now insert the hashes
+        hashmask = (1 << self.hashbits) - 1
         for time, hash in timehashpairs:
             # Keep only the bottom part of the time value
             time %= self.maxtime
+            # Keep only the bottom part of the hash value
+            hash &= hashmask
             # Mixin with ID
             val = (id * self.maxtime + time) #.astype(np.uint32)
             # increment count of vals in this hash bucket
@@ -102,19 +106,33 @@ class HashTable:
     def save(self, name, params=[]):
         """ Save hash table to file <name>, including optional addition params """
         self.params = params
-        self.version = HT_VERSION
+        self.version = self.HT_VERSION
         with gzip.open(name, 'wb') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
-        print "saved hash table to ", name
+        print "Saved fprints for", len(self.names), "files", \
+              "(", sum(self.counts), "hashes)", \
+              "to", name
 
     def load(self, name):
+        """ Read either pklz or mat-format hash table file """
+        stem, ext = os.path.splitext(name)
+        if ext == '.mat':
+            params = self.load_matlab(name)
+        else:
+            params = self.load_pkl(name)
+        print "Read fprints for", len(self.names), "files", \
+              "(", sum(self.counts), "hashes)", \
+              "from", name
+        return params
+
+    def load_pkl(self, name):
         """ Read hash table values from file <name>, return params """
         with gzip.open(name, 'rb') as f:
             temp = pickle.load(f)
-        assert(temp.version >= HT_COMPAT_VERSION)
+        assert(temp.version >= self.HT_COMPAT_VERSION)
         params = temp.params
-        self.size = temp.size
+        self.hashbits = temp.hashbits
         self.depth = temp.depth
         self.maxtime = temp.maxtime
         self.table = temp.table
@@ -143,7 +161,7 @@ class HashTable:
         params = {}
         params['mat_version'] = mht['HT_params'][0][0][-1][0][0]
         assert(params['mat_version'] >= 0.9)
-        self.size = mht['HT_params'][0][0][0][0][0]
+        self.hashbits = int(np.log(mht['HT_params'][0][0][0][0][0])/np.log(2.0))
         self.depth = mht['HT_params'][0][0][1][0][0]
         self.maxtime = mht['HT_params'][0][0][2][0][0]
         params['hoptime'] = mht['HT_params'][0][0][3][0][0]
