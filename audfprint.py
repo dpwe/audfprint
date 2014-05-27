@@ -339,15 +339,17 @@ def main(argv):
                 nhashaligned = 0
             else:
                 # figure the number of raw and aligned matches for top hit
+                tophitid = rslts[0][0]
                 nhashaligned = rslts[0][1]
+                bestaligntime = t_hop*float(rslts[0][2])
                 nhashraw = rslts[0][3]
             # to count as a match, the number of aligned matches must be 
             # greater than 10, or the larger of 4 or 1% of the raw hash matches
             if nhashaligned > 4 and (nhashaligned > 10 
                                      or nhashaligned > nhashraw/100):
-                print "Matched", qry, "as", ht.names[rslts[0][0]], \
-                      "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
-                      "with", rslts[0][1], "of", rslts[0][3], "hashes"
+                print "Matched", qry, "as", ht.names[tophitid], \
+                      "at %.3f" % bestaligntime, "s", \
+                      "with", nhashaligned, "of", nhashraw, "hashes"
             else:
                 print "NO MATCH for", qry
 
