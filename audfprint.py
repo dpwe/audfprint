@@ -237,9 +237,9 @@ def ingest(ht, filename, density=None):
     ht.store(filename, hashes)
     return (len(d)/float(sr), len(hashes))
 
+# Handy function to build a new hash table from a file glob pattern
 import glob, time
-
-def glob2hashtable(pattern):
+def glob2hashtable(pattern, density=None):
     """ Build a hash table from the files matching a glob pattern """
     ht = hash_table.HashTable()
     filelist = glob.glob(pattern)
@@ -248,7 +248,7 @@ def glob2hashtable(pattern):
     tothashes = 0
     for ix, file in enumerate(filelist):
         print time.ctime(), "ingesting #", ix, ":", file, " ..."
-        dur, nhash = ingest(ht, file)
+        dur, nhash = ingest(ht, file, density)
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
@@ -261,6 +261,17 @@ if test:
     ht = hash_table.HashTable()
     ingest(ht, fn)
     ht.save('httest.pklz')
+
+def filenames(filelist, listflag):
+  """ Iterator to yeild all the filenames, possibly interpreting them as list files """
+  if not listflag:
+    for filename in filelist:
+      yield filename
+  else:
+    for listfilename in filelist:
+      with open(listfilename, 'r') as f:
+        for filename in f:
+          yield filename.rstrip('\n')
 
 
 # Command line interface
@@ -289,73 +300,74 @@ Options:
 
 __version__ = 20130527
 
-def filenames(filelist, listflag):
-  """ Iterator to yeild all the filenames, possibly interpreting them as list files """
-  if not listflag:
-    for filename in filelist:
-      yield filename
-  else:
-    for listfilename in filelist:
-      with open(listfilename, 'r') as f:
-        for filename in f:
-          yield filename.rstrip('\n')
-
-
 def main(argv):
-  args = docopt.docopt(usage, version=__version__) 
+    args = docopt.docopt(usage, version=__version__) 
 
-  if args['new']:
-      cmd = 'new'
-  elif args['add']:
-      cmd = 'add'
-  else:
-      cmd = 'match'
-  dbasename = args['<dbase>']
-  density = float(args['--density'])
-  hashbits = int(args['--hashbits'])
-  bucketsize = int(args['--bucketsize'])
-  maxtime = int(args['--maxtime'])
-  listflag = args['--list']
-  files = args['<file>']
+    if args['new']:
+        cmd = 'new'
+    elif args['add']:
+        cmd = 'add'
+    else:
+        cmd = 'match'
+    dbasename = args['<dbase>']
+    density = float(args['--density'])
+    hashbits = int(args['--hashbits'])
+    bucketsize = int(args['--bucketsize'])
+    maxtime = int(args['--maxtime'])
+    listflag = args['--list']
+    files = args['<file>']
+    # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
+    target_sr = 11025
+    n_fft = 512
+    n_hop = n_fft/2
+    t_hop = n_hop/float(target_sr)
 
-  if cmd == 'new':
-    # Create a new hash table
-    ht = hash_table.HashTable(hashbits=hashbits, depth=bucketsize, 
-                              maxtime=maxtime)
-  else:
-    # Load existing
-     ht = hash_table.HashTable(dbasename)
+    if cmd == 'new':
+        # Create a new hash table
+        ht = hash_table.HashTable(hashbits=hashbits, depth=bucketsize, 
+                                  maxtime=maxtime)
+    else:
+        # Load existing
+        ht = hash_table.HashTable(dbasename)
 
-  if args['match']:
-    # Running query
-    t_hop = 0.02322
-    for qry in filenames(files, listflag):
-      rslts = audfprint_match.match_file(ht, qry, density=density)
-      if len(rslts) and (rslts[0][1]>3 
-                         and (rslts[0][1] > 10 
-                              or rslts[0][1] > rslts[0][3]/100.0)):
-          print "Matched", qry, "as", ht.names[rslts[0][0]], \
-                "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
-                "with", rslts[0][1], "of", rslts[0][3], "hashes"
-      else:
-          print "NO MATCH for", qry
+    if args['match']:
+        # Running query
+        for qry in filenames(files, listflag):
+            rslts = audfprint_match.match_file(ht, qry, density=density)
+            if len(rslts) == 0:
+                # No matches returned at all
+                nhashaligned = 0
+            else:
+                # figure the number of raw and aligned matches for top hit
+                nhashaligned = rslts[0][1]
+                nhashraw = rslts[0][3]
+            # to count as a match, the number of aligned matches must be 
+            # greater than 10, or the larger of 4 or 1% of the raw hash matches
+            if nhashaligned > 4 and (nhashaligned > 10 
+                                     or nhashaligned > nhashraw/100):
+                print "Matched", qry, "as", ht.names[rslts[0][0]], \
+                      "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
+                      "with", rslts[0][1], "of", rslts[0][3], "hashes"
+            else:
+                print "NO MATCH for", qry
 
-  else:
-    # Adding files - command was 'new' or 'add'
-    initticks = time.clock()
-    totdur = 0
-    tothashes = 0
-    for ix, file in enumerate(filenames(files, listflag)):
-        print time.ctime(), "ingesting #", ix, ":", file, " ..."
-        dur, nhash = ingest(ht, file, density=density)
-        totdur += dur
-        tothashes += nhash
-    elapsedtime = time.clock() - initticks
-    print "Added", tothashes, "hashes", \
-          "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
-          "at %.3f" % (elapsedtime/totdur), "x RT"
-    if ht.dirty:
-        ht.save(dbasename)
+    else:
+        # Adding files - command was 'new' or 'add'
+        initticks = time.clock()
+        totdur = 0
+        tothashes = 0
+        for ix, file in enumerate(filenames(files, listflag)):
+            print time.ctime(), "ingesting #", ix, ":", file, " ..."
+            dur, nhash = ingest(ht, file, density=density)
+            totdur += dur
+            tothashes += nhash
+
+        elapsedtime = time.clock() - initticks
+        print "Added", tothashes, "hashes", \
+              "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
+              "at %.3f" % (elapsedtime/totdur), "x RT"
+        if ht.dirty:
+            ht.save(dbasename)
 
 
 # Run the main function if called from the command line
