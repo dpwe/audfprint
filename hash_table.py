@@ -27,7 +27,7 @@ class HashTable:
     # Earliest acceptable version
     HT_COMPAT_VERSION = 20140525
 
-    def __init__(self, hashbits=20, depth=100, maxtime=16384, filename=None):
+    def __init__(self, filename=None, hashbits=20, depth=100, maxtime=16384):
         """ allocate an empty hash table of the specified size """
         if filename is not None:
             self.load(filename)

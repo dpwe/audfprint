@@ -40,22 +40,26 @@ def match_hashes(ht, hashes):
         resultlist.append( (tid, filtcount, mode, rawcount) )
     return sorted(resultlist, key=lambda x:x[1], reverse=True)
 
-def match_file(ht, filename):
+def match_file(ht, filename, density=None):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount)
     """
     d, sr = librosa.load(filename, sr=11025)
     # Collect landmarks offset by 0..3 quarter-windows
-    t_win = 0.04644
-    win = int(np.round(sr * t_win))
+    t_hop = 0.02322
+    win = int(np.round(sr * t_hop))
     qwin = win/4
     hq = audfprint.landmarks2hashes(
-             audfprint.peaks2landmarks(audfprint.find_peaks(d, sr)))
+             audfprint.peaks2landmarks(
+                 audfprint.find_peaks(d, sr, density)))
     hq += audfprint.landmarks2hashes(
-             audfprint.peaks2landmarks(audfprint.find_peaks(d[qwin:], sr)))
+              audfprint.peaks2landmarks(
+                  audfprint.find_peaks(d[qwin:], sr, density)))
     hq += audfprint.landmarks2hashes(
-             audfprint.peaks2landmarks(audfprint.find_peaks(d[2*qwin:], sr)))
+             audfprint.peaks2landmarks(
+                 audfprint.find_peaks(d[2*qwin:], sr, density)))
     hq += audfprint.landmarks2hashes(
-             audfprint.peaks2landmarks(audfprint.find_peaks(d[3*qwin:], sr)))
+             audfprint.peaks2landmarks(
+                 audfprint.find_peaks(d[3*qwin:], sr, density)))
     #print "Analyzed",filename,"to",len(hq),"hashes"
     # Run query
     return match_hashes(ht, hq)

@@ -22,8 +22,6 @@ t_win = 0.0464
 t_hop = 0.0232
 # spectrogram enhancement
 hpf_pole = 0.98
-# masking envelope decay constant
-a_dec = (1.0 - 0.01*(DENSITY*np.sqrt(t_hop/0.032)/35))**(1.0/OVERSAMP)
 # how wide to spreak peaks
 f_sd = 30.0
 # Maximum number of local maxima to keep per frame
@@ -80,10 +78,15 @@ def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
         Y = np.maximum(Y, val*np.exp(-0.5*(((binvals - pos)/float(width))**2)))
     return Y
 
-def find_peaks(d, sr):
+def find_peaks(d, sr, density=None):
     """Find the local peaks in the spectrogram as basis for fingerprints.
        Returns a list of (time_frame, freq_bin) pairs.
     """
+    # Args 
+    if density is None:
+        density = DENSITY
+    # masking envelope decay constant
+    a_dec = (1.0 - 0.01*(density*np.sqrt(t_hop/0.032)/35.0))**(1.0/OVERSAMP)
     # Base spectrogram
     n_fft = int(np.round(sr*t_win))
     n_hop = int(np.round(sr*t_hop))
@@ -194,7 +197,7 @@ def landmarks2hashes(landmarks):
 
 import hash_table
 
-def ingest(ht, filename):
+def ingest(ht, filename, density=None):
     """ Read an audio file and add it to the database
     :params:
       ht : HashTable object
@@ -211,7 +214,7 @@ def ingest(ht, filename):
     d, sr = librosa.load(filename, sr=targetsr)
     # librosa.load on mp3 files prepents 396 samples compared 
     # to Matlab audioread
-    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr)))
+    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr, density)))
     ht.store(filename, hashes)
     return (len(d)/float(sr), len(hashes))
 
@@ -283,20 +286,35 @@ def main(argv):
   args = docopt.docopt(usage, version=__version__) 
 
   if args['new']:
+      cmd = 'new'
+  elif args['add']:
+      cmd = 'add'
+  else:
+      cmd = 'match'
+  dbasename = args['<dbase>']
+  density = float(args['--density'])
+  hashbits = int(args['--hashbits'])
+  bucketsize = int(args['--bucketsize'])
+  maxtime = int(args['--maxtime'])
+  listflag = args['--list']
+  files = args['<file>']
+
+  if cmd == 'new':
     # Create a new hash table
-    ht = hash_table.HashTable(hashbits=int(args['--hashbits']), 
-                              depth=int(args['--bucketsize']),
-                              maxtime=int(args['--maxtime']))
+    ht = hash_table.HashTable(hashbits=hashbits, depth=bucketsize, 
+                              maxtime=maxtime)
   else:
     # Load existing
-     ht = hash_table.HashTable(filename=args['<dbase>'])
+     ht = hash_table.HashTable(dbasename)
 
   if args['match']:
     # Running query
     t_hop = 0.02322
-    for qry in filenames(args['<file>'], args['--list']):
-      rslts = audfprint_match.match_file(ht, qry)
-      if len(rslts):
+    for qry in filenames(files, listflag):
+      rslts = audfprint_match.match_file(ht, qry, density=density)
+      if len(rslts) and (rslts[0][1]>3 
+                         and (rslts[0][1] > 10 
+                              or rslts[0][1] > rslts[0][3]/100.0)):
           print "Matched", qry, "as", ht.names[rslts[0][0]], \
                 "at %.3f" % (t_hop*float(rslts[0][2])), "s", \
                 "with", rslts[0][1], "of", rslts[0][3], "hashes"
@@ -308,9 +326,9 @@ def main(argv):
     initticks = time.clock()
     totdur = 0
     tothashes = 0
-    for ix, file in enumerate(filenames(args['<file>'], args['--list'])):
+    for ix, file in enumerate(filenames(files, listflag)):
         print time.ctime(), "ingesting #", ix, ":", file, " ..."
-        dur, nhash = ingest(ht, file)
+        dur, nhash = ingest(ht, file, density=density)
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
@@ -318,7 +336,7 @@ def main(argv):
           "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
           "at %.3f" % (elapsedtime/totdur), "x RT"
     if ht.dirty:
-        ht.save(args['<dbase>'])
+        ht.save(dbasename)
 
 
 # Run the main function if called from the command line
