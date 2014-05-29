@@ -20,4 +20,6 @@ Options:
   --help                          Print this message
 ```
 
+Uses librosa, get https://github.com/bmcfee/librosa
+
 Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt
