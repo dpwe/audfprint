@@ -40,26 +40,32 @@ def match_hashes(ht, hashes):
         resultlist.append( (tid, filtcount, mode, rawcount) )
     return sorted(resultlist, key=lambda x:x[1], reverse=True)
 
-def match_file(ht, filename, density=None):
+def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount)
     """
-    d, sr = librosa.load(filename, sr=11025)
+    #print "match_file: sr=",sr
+    d, sr = librosa.load(filename, sr=sr)
     # Collect landmarks offset by 0..3 quarter-windows
-    t_hop = 0.02322
-    win = int(np.round(sr * t_hop))
-    qwin = win/4
+    #t_hop = 0.02322
+    #win = int(np.round(sr * t_hop))
+    #qwin = win/4
+    qwin = n_hop/4
     hq = audfprint.landmarks2hashes(
              audfprint.peaks2landmarks(
-                 audfprint.find_peaks(d, sr, density)))
+                 audfprint.find_peaks(d, sr, density=density, 
+                                      n_fft=n_fft, n_hop=n_hop)))
     hq += audfprint.landmarks2hashes(
               audfprint.peaks2landmarks(
-                  audfprint.find_peaks(d[qwin:], sr, density)))
+                  audfprint.find_peaks(d[qwin:], sr, density=density, 
+                                       n_fft=n_fft, n_hop=n_hop)))
     hq += audfprint.landmarks2hashes(
              audfprint.peaks2landmarks(
-                 audfprint.find_peaks(d[2*qwin:], sr, density)))
+                 audfprint.find_peaks(d[2*qwin:], sr, density=density, 
+                                       n_fft=n_fft, n_hop=n_hop)))
     hq += audfprint.landmarks2hashes(
              audfprint.peaks2landmarks(
-                 audfprint.find_peaks(d[3*qwin:], sr, density)))
+                 audfprint.find_peaks(d[3*qwin:], sr, density=density, 
+                                       n_fft=n_fft, n_hop=n_hop)))
     #print "Analyzed",filename,"to",len(hq),"hashes"
     # Run query
     return match_hashes(ht, hq)

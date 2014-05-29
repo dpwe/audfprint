@@ -30,7 +30,7 @@ class HashTable:
     def __init__(self, filename=None, hashbits=20, depth=100, maxtime=16384):
         """ allocate an empty hash table of the specified size """
         if filename is not None:
-            self.load(filename)
+            self.params = self.load(filename)
         else:
             self.hashbits = hashbits
             self.depth = depth

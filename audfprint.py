@@ -17,9 +17,10 @@ import scipy.signal
 DENSITY = 20.0
 # OVERSAMP > 1 tries to generate extra landmarks by decaying faster
 OVERSAMP = 1
-# 512 pt FFT @ 11025 Hz, 50% hop
-t_win = 0.0464
-t_hop = 0.0232
+## 512 pt FFT @ 11025 Hz, 50% hop
+#t_win = 0.0464
+#t_hop = 0.0232
+# Just specify n_fft
 # spectrogram enhancement
 hpf_pole = 0.98
 # how wide to spreak peaks
@@ -97,18 +98,23 @@ def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
     
     return Y
 
-def find_peaks(d, sr, density=None):
+def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
     """Find the local peaks in the spectrogram as basis for fingerprints.
        Returns a list of (time_frame, freq_bin) pairs.
     """
     # Args 
     if density is None:
         density = DENSITY
-    # masking envelope decay constant
-    a_dec = (1.0 - 0.01*(density*np.sqrt(t_hop/0.032)/35.0))**(1.0/OVERSAMP)
+    if n_fft is None:
+        n_fft = 512
+    if n_hop is None:
+        n_hop = n_fft/2
     # Base spectrogram
-    n_fft = int(np.round(sr*t_win))
-    n_hop = int(np.round(sr*t_hop))
+    #n_fft = int(np.round(sr*t_win))
+    #n_hop = int(np.round(sr*t_hop))
+    #print "find_peaks: sr=",sr,"n_fft=",n_fft,"n_hop=",n_hop
+    # masking envelope decay constant
+    a_dec = (1.0 - 0.01*(density*np.sqrt(n_hop/352.8)/35.0))**(1.0/OVERSAMP)
     # Take spectrogram
     mywin = np.hanning(n_fft+2)[1:-1]
     S = np.abs(librosa.stft(d, n_fft=n_fft, hop_length=n_hop, window=mywin))
@@ -216,24 +222,36 @@ def landmarks2hashes(landmarks):
 
 import hash_table
 
-def ingest(ht, filename, density=None):
+def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
     """ Read an audio file and add it to the database
     :params:
       ht : HashTable object
         the hash table to add to
       filename : str
         name of the soundfile to add
+      density : float (default: None)
+        the target density of landmarks per sec
+      n_hop : int (default: None)
+        hop in samples between frames
+      n_fft : int (default: None)
+        size of each FFT
+      sr : int (default: None)
+        resample input files to this sampling rate
     :returns:
       dur : float
         the duration of the track
       nhashes : int
         the number of hashes it mapped into
     """
-    targetsr = 11025
-    d, sr = librosa.load(filename, sr=targetsr)
-    # librosa.load on mp3 files prepents 396 samples compared 
-    # to Matlab audioread
-    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr, density)))
+    #sr = 11025
+    #print "ingest: sr=",sr
+    d, sr = librosa.load(filename, sr=sr)
+    # librosa.load on mp3 files prepends 396 samples compared 
+    # to Matlab audioread ??
+    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
+                                                         density=density, 
+                                                         n_fft=n_fft, 
+                                                         n_hop=n_hop)))
     ht.store(filename, hashes)
     return (len(d)/float(sr), len(hashes))
 
@@ -289,10 +307,11 @@ or identify noisy query excerpts with match.
 Usage: audfprint (new | add | match) (-d <dbase> | --dbase <dbase>) [options] <file>...
 
 Options:
-  -n <dens>, --density <dens>     Target hashes per second [default: 7.0]
+  -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
+  -s <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -l, --list                      Input files are lists, not audio
   --version                       Report version number
   --help                          Print this message
@@ -314,13 +333,13 @@ def main(argv):
     hashbits = int(args['--hashbits'])
     bucketsize = int(args['--bucketsize'])
     maxtime = int(args['--maxtime'])
+    samplerate = int(args['--samplerate'])
     listflag = args['--list']
     files = args['<file>']
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
-    target_sr = 11025
+    target_sr = samplerate # not always 11025, but always n_fft=512
     n_fft = 512
     n_hop = n_fft/2
-    t_hop = n_hop/float(target_sr)
 
     if cmd == 'new':
         # Create a new hash table
@@ -329,11 +348,19 @@ def main(argv):
     else:
         # Load existing
         ht = hash_table.HashTable(dbasename)
+        if 'samplerate' in ht.params:
+            if ht.params['samplerate'] != target_sr:
+                target_sr = ht.params['samplerate']
+                print "samplerate set to",target_sr,"per",dbasename
+
+    t_hop = n_hop/float(target_sr)
 
     if cmd == 'match':
         # Running query
         for qry in filenames(files, listflag):
-            rslts = audfprint_match.match_file(ht, qry, density=density)
+            rslts = audfprint_match.match_file(ht, qry, density=density,
+                                               sr=target_sr, 
+                                               n_fft=n_fft, n_hop=n_hop)
             if len(rslts) == 0:
                 # No matches returned at all
                 nhashaligned = 0
@@ -360,7 +387,9 @@ def main(argv):
         tothashes = 0
         for ix, file in enumerate(filenames(files, listflag)):
             print time.ctime(), "ingesting #", ix, ":", file, " ..."
-            dur, nhash = ingest(ht, file, density=density)
+            dur, nhash = ingest(ht, file, density=density,
+                                sr=target_sr, 
+                                n_fft=n_fft, n_hop=n_hop)
             totdur += dur
             tothashes += nhash
 
@@ -369,7 +398,7 @@ def main(argv):
               "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
               "at %.3f" % (elapsedtime/totdur), "x RT"
         if ht.dirty:
-            ht.save(dbasename)
+            ht.save(dbasename, {"samplerate":samplerate})
 
 
 # Run the main function if called from the command line
