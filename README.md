@@ -11,7 +11,7 @@ or identify noisy query excerpts with match.
 Usage: audfprint (new | add | match) (-d <dbase> | --dbase <dbase>) [options] <file>...
 
 Options:
-  -n <dens>, --density <dens>     Target hashes per second [default: 7.0]
+  -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
@@ -24,10 +24,10 @@ Uses librosa, get https://github.com/bmcfee/librosa
 
 Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt
 
-Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/
+Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/ .  This python code will actually read and use databases created by the Matlab code (version 0.90 upwards).
 
 Usage
-=====
+-----
 
 Build a database of fingerprints from a set of reference audio files:
 ```
@@ -62,4 +62,11 @@ Read fprints for 13 files ( 93148 hashes) from fpdbase.pklz
 Matched query.mp3 as Nine_Lives/05-Full_Circle.mp3 at 50.085 s with 14 of 17 hashes
 ```
 The query contained audio from `Nine_Lives/05-Full_Circle.mp3` starting at 50.085 sec into the track.  There were a total of 17 landmark hashes shared between the query and that track, and 14 of them had a consistent time offset.  Generally, anything more than 5 or 6 consistently-timed matching hashes indicate a true match, and random chance will result in fewer than 1% of the raw common hashes being temporally consistent.
+
+Scaling
+-------
+The fingerprint database records 2^20 (~1M) distinct fingerprints, with (by default) 100 entries for each fingerprint bucket.  When the bucket fills, track entries are dropped at random; since matching depends only on making a minimum number of matches, but no particular match, dropping some of the more popular ones does not prevent matching.  The Matlab version has been successfully used for databases of 100k+ tracks.  Reducing the hash density (`--density`) leads to smaller reference database size, and the capacity to record more reference items before buckets begin to fill; a density of 7.0 works well.
+
+Times (in units of 256 samples, i.e., 23 ms at the default 11kHz sampling rate) are stored in the bottom 14 bits of each database entry, meaning that times larger than 2^14*0.023 = 380 sec, or about 6 mins, are aliased.  If you want to correctly identify time offsets in tracks longer than this, you need to use a larger `--maxtime`.  The trade-off is that the remaining bits in each 32 bit entry (i.e., 18 bits for the default 14 bit times) are used to store the track ID.  Thus, by default, the database can only remember 2^18 = 262k tracks; using a larger `--maxtime` will reduce this; similarly, you can increase the number of distinct tracks by reducing `--maxtime`, which doesn't prevent matching tracks, but progressively reduces discrimination as the number of distinct time slots reduces (and makes the reported time offsets inaccurate for longer tracks).
+
 
