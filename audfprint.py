@@ -220,7 +220,42 @@ def landmarks2hashes(landmarks):
                  | (dtime & dtmask)) ) 
              for time, bin1, bin2, dtime in landmarks ]
 
+######## function signature for Gordon feature extraction
+######## which stores the precalculated hashes for each track separately
+def extract_features(track_obj, *args, **kwargs):
+    """ Extract the audfprint fingerprint hashes for one file.
+    :params:
+      track_obj : object
+        Gordon's internal structure defining a track; we use 
+        track_obj.fn_audio to find the actual audio file.
+    :returns:
+      hashes : list of (int, int)
+        The times (in frames) and hashes analyzed from the audio file.
+    """
+    density = None
+    n_fft = None
+    n_hop = None
+    sr = None
+    if "density" in kwargs:
+        density = kwargs["density"]
+    if "n_fft" in kwargs:
+        n_fft = kwargs["n_fft"]
+    if "n_hop" in kwargs:
+        n_hop = kwargs["n_hop"]
+    if "sr" in kwargs:
+        sr = kwargs["sr"]
+    [d, sr] = librosa.load(track_obj.fn_audio, sr=sr)
+    return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
+                                                       density=density, 
+                                                       n_fft=n_fft, 
+                                                       n_hop=n_hop)))
+
 import hash_table
+
+class myTrackObj:
+    """ a local alternative to Gordon's track_obj """
+    # the name of the audio file
+    fn_audio = None  
 
 def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
     """ Read an audio file and add it to the database
@@ -245,15 +280,20 @@ def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
     """
     #sr = 11025
     #print "ingest: sr=",sr
-    d, sr = librosa.load(filename, sr=sr)
+    #d, sr = librosa.load(filename, sr=sr)
     # librosa.load on mp3 files prepends 396 samples compared 
     # to Matlab audioread ??
-    hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
-                                                         density=density, 
-                                                         n_fft=n_fft, 
-                                                         n_hop=n_hop)))
+    #hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
+    #                                                     density=density, 
+    #                                                     n_fft=n_fft, 
+    #                                                     n_hop=n_hop)))
+    trackObj = myTrackObj()
+    trackObj.fn_audio = filename
+    hashes = extract_features(trackObj, sr=sr, 
+                              density=density, n_fft=n_fft, n_hop=n_hop)
     ht.store(filename, hashes)
-    return (len(d)/float(sr), len(hashes))
+    #return (len(d)/float(sr), len(hashes))
+    return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
 
 # Handy function to build a new hash table from a file glob pattern
 import glob, time
