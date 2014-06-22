@@ -101,6 +101,30 @@ def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
 def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
     """Find the local peaks in the spectrogram as basis for fingerprints.
        Returns a list of (time_frame, freq_bin) pairs.
+
+     :params:
+        d - np.array of float
+          Input waveform as 1D vector
+
+        sr - int
+          Sampling rate of d
+
+        density - int
+          Target hashes per second
+
+        n_fft - int
+          Size of FFT used for STFT analysis in samples
+
+        n_hop - int
+          Sample advance between STFT frames
+
+     :returns:
+        pklist - list of (int, int)
+          Ordered list of landmark peaks found in STFT.  First value of
+          each pair is the time index (in STFT frames, i.e., units of 
+          n_hop/sr secs), second is the FFT bin (in units of sr/n_fft 
+          Hz).
+
     """
     # Args 
     if density is None:
@@ -220,6 +244,47 @@ def landmarks2hashes(landmarks):
                  | (dtime & dtmask)) ) 
              for time, bin1, bin2, dtime in landmarks ]
 
+def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None):
+    """ Read a soundfile and return its fingerprint hashes as a 
+        list of (time, hash) pairs.  If specified, resample to sr first. """
+    [d, sr] = librosa.load(filename, sr=sr)
+    return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
+                                                       density=density, 
+                                                       n_fft=n_fft, 
+                                                       n_hop=n_hop)))
+
+
+########### functions to read/write hashes to file for a single track #####
+
+import struct
+
+# Format string for writing binary data to file
+hash_fmt = '<2i'
+hash_magic = 'audfprinthash_V0'
+
+def hashes_save(hashfilename, hashes):
+    """ Write out a list of (time, hash) pairs as 32 bit ints """
+    with open(hashfilename, 'wb') as f:
+        f.write(hash_magic)
+        for time, hash in hashes:
+            f.write(struct.pack(hash_fmt, time, hash))
+
+def hashes_load(hashfilename):
+    """ Read back a set of hashes written by hashes_save """
+    hashes = [];
+    fmtsize = struct.calcsize(hash_fmt)
+    with open(hashfilename, 'rb') as f:
+        magic = f.read(len(hash_magic))
+        if magic != hash_magic:
+            raise IOError('%s is not a hash file (magic %s)' 
+                          % (hashfilename, magic) )
+        data = f.read(fmtsize)
+        while data is not None and len(data) == fmtsize:
+            hashes.append(struct.unpack(hash_fmt, data))
+            data = f.read(fmtsize)
+    return hashes
+
+
 ######## function signature for Gordon feature extraction
 ######## which stores the precalculated hashes for each track separately
 def extract_features(track_obj, *args, **kwargs):
@@ -244,11 +309,10 @@ def extract_features(track_obj, *args, **kwargs):
         n_hop = kwargs["n_hop"]
     if "sr" in kwargs:
         sr = kwargs["sr"]
-    [d, sr] = librosa.load(track_obj.fn_audio, sr=sr)
-    return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
-                                                       density=density, 
-                                                       n_fft=n_fft, 
-                                                       n_hop=n_hop)))
+    return wavfile2hashes(track_obj.fn_audio, sr=sr, density=density, 
+                          n_fft=n_fft, n_hop=n_hop)
+
+########### functions to link to actual hash table index database #######
 
 import hash_table
 
