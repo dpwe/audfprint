@@ -260,7 +260,7 @@ import struct
 
 # Format string for writing binary data to file
 hash_fmt = '<2i'
-hash_magic = 'audfprinthash_V0'
+hash_magic = 'audfprinthashV00'  # 16 chars, FWIW
 
 def hashes_save(hashfilename, hashes):
     """ Write out a list of (time, hash) pairs as 32 bit ints """
