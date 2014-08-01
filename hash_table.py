@@ -91,9 +91,10 @@ class HashTable:
                    in self.table[hash, :min(self.depth, self.counts[hash])] ]
 
     def get_hits(self, hashes):
-        """ Return a list of (id, delta_time) pairs associated with each element in hashes list of (time, hash) """
-        return [ (id, rtime-time) for time, hash in hashes
-                                     for id, rtime in self.get_entry(hash)]
+        """ Return a list of (id, delta_time, hash, time) tuples 
+            associated with each element in hashes list of (time, hash) """
+        return [ (id, rtime-time, hash, time) for time, hash in hashes
+                                          for id, rtime in self.get_entry(hash)]
 
     def save(self, name, params=[]):
         """ Save hash table to file <name>, including optional addition params """

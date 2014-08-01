@@ -145,9 +145,10 @@ def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
     S = np.log(np.maximum(S, np.max(S)/1e6))
     S = S - np.mean(S)
     # High-pass filter onset emphasis
+    # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
     S = np.array([scipy.signal.lfilter([1, -1], 
                                        [1, -(hpf_pole)**(1/OVERSAMP)], Srow) 
-                  for Srow in S])
+                  for Srow in S])[:-1,]
     # initial threshold envelope based on peaks in first 10 frames
     (srows, scols) = np.shape(S)
     sthresh = spreadpeaksinvector(np.max(S[:,:np.minimum(10, scols)],axis=1), 
@@ -215,28 +216,29 @@ def peaks2landmarks(pklist):
             for col2 in xrange(col+1, min(scols, col+targetdt)):
                 for peak2 in pklist[col2]:
                     if ( (pairsthispeak < maxpairsperpeak)
-                         and abs(peak-peak2) < targetdf ):
+                         and abs(peak-peak2) < targetdf):
                         # We have a pair!
                         landmarks.append( (col, peak, peak2, col2-col) )
                         pairsthispeak += 1
 
     return landmarks
 
+# Globals defining packing of landmarks into hashes
+F1bits = 8
+DFbits = 6
+DTbits = 6
+
+b1mask  = (1 << F1bits) - 1
+b1shift = DFbits + DTbits
+dfmask  = (1 << DFbits) - 1
+dfshift = DTbits
+dtmask  = (1 << DTbits) - 1
+
 def landmarks2hashes(landmarks):
     """ Convert a list of (time, bin1, bin2, dtime) landmarks 
         into a list of (time, hash) pairs where the hash combines 
         the three remaining values.
     """
-    F1bits = 8
-    DFbits = 6
-    DTbits = 6
-
-    b1mask  = (1 << F1bits) - 1
-    b1shift = DFbits + DTbits
-    dfmask  = (1 << DFbits) - 1
-    dfshift = DTbits
-    dtmask  = (1 << DTbits) - 1
-
     # build up and return the list of hashed values
     return [ ( time, 
                ( ((bin1 & b1mask) << b1shift) 
@@ -244,14 +246,37 @@ def landmarks2hashes(landmarks):
                  | (dtime & dtmask)) ) 
              for time, bin1, bin2, dtime in landmarks ]
 
+def hashes2landmarks(hashes):
+    """ Convert the mashed-up landmarks in hashes back into a list 
+        of (time, bin1, bin2, dtime) tuples.
+    """
+    landmarks = []
+    for time, hash in hashes:
+        dtime = hash & dtmask
+        bin1 = (hash >> b1shift) & b1mask
+        dbin = (hash >> dfshift) & dfmask
+        # Sign extend frequency difference
+        if dbin > (1 << (DFbits-1)):
+            dbin -= (1 << DFbits)
+        landmarks.append( (time, bin1, bin1+dbin, dtime) )
+    return landmarks
+
+# Special extension indicating precomputed fingerprint
+precompext = '.afpt'
+
 def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None):
     """ Read a soundfile and return its fingerprint hashes as a 
         list of (time, hash) pairs.  If specified, resample to sr first. """
-    [d, sr] = librosa.load(filename, sr=sr)
-    return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
-                                                       density=density, 
-                                                       n_fft=n_fft, 
-                                                       n_hop=n_hop)))
+    root, ext = os.path.splitext(filename)
+    if ext == precompext:
+        # short-circuit - precomputed fingerprint file
+        return hashes_load(filename)
+    else:
+        [d, sr] = librosa.load(filename, sr=sr)
+        return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
+                                                           density=density, 
+                                                           n_fft=n_fft, 
+                                                           n_hop=n_hop)))
 
 
 ########### functions to read/write hashes to file for a single track #####
@@ -395,20 +420,30 @@ def filenames(filelist, listflag):
         for filename in f:
           yield filename.rstrip('\n')
 
+# for saving precomputed fprints
+def ensure_dir(fname):
+    """ ensure that the directory for the named path exists """
+    head, tail = os.path.split(fname)
+    if len(head):
+        if not os.path.exists(head):
+            os.makedirs(head)
 
 # Command line interface
 
 import audfprint_match
 import docopt
 import time 
+import os
 
 usage = """
 Audio landmark-based fingerprinting.  
 Create a new fingerprint dbase with new, 
 append new files to an existing database with add, 
 or identify noisy query excerpts with match.
+"Precompute" writes a *.fpt file under fptdir with 
+precomputed fingerprint for each input wav file.
 
-Usage: audfprint (new | add | match) (-d <dbase> | --dbase <dbase>) [options] <file>...
+Usage: audfprint (new | add | match | precompute) [-d <dbase> | --dbase <dbase>] [options] <file>...
 
 Options:
   -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
@@ -416,7 +451,9 @@ Options:
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
   -s <val>, --samplerate <val>    Resample input files to this [default: 11025]
+  -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -l, --list                      Input files are lists, not audio
+  -v, --verbose                   Verbose reporting
   --version                       Report version number
   --help                          Print this message
 """
@@ -430,6 +467,8 @@ def main(argv):
         cmd = 'new'
     elif args['add']:
         cmd = 'add'
+    elif args['precompute']:
+        cmd = 'precompute'
     else:
         cmd = 'match'
     dbasename = args['<dbase>']
@@ -439,7 +478,9 @@ def main(argv):
     maxtime = int(args['--maxtime'])
     samplerate = int(args['--samplerate'])
     listflag = args['--list']
+    verbose = args['--verbose']
     files = args['<file>']
+    precompdir = args['--precompdir']
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
     n_fft = 512
@@ -449,22 +490,28 @@ def main(argv):
         # Create a new hash table
         ht = hash_table.HashTable(hashbits=hashbits, depth=bucketsize, 
                                   maxtime=maxtime)
-    else:
+    elif cmd != 'precompute':
         # Load existing
         ht = hash_table.HashTable(dbasename)
         if 'samplerate' in ht.params:
             if ht.params['samplerate'] != target_sr:
                 target_sr = ht.params['samplerate']
                 print "samplerate set to",target_sr,"per",dbasename
+    else:
+        # dummy empty hash table for precompute
+        ht = {'params':[]}
 
     t_hop = n_hop/float(target_sr)
 
     if cmd == 'match':
         # Running query
         for qry in filenames(files, listflag):
-            rslts = audfprint_match.match_file(ht, qry, density=density,
-                                               sr=target_sr, 
-                                               n_fft=n_fft, n_hop=n_hop)
+            rslts, dur, nhash = audfprint_match.match_file(ht, qry, 
+                                                           density=density,
+                                                           sr=target_sr, 
+                                                           n_fft=n_fft, 
+                                                           n_hop=n_hop, 
+                                                           verbose=verbose)
             if len(rslts) == 0:
                 # No matches returned at all
                 nhashaligned = 0
@@ -478,11 +525,31 @@ def main(argv):
             # greater than 10, or the larger of 4 or 1% of the raw hash matches
             if nhashaligned > 4 and (nhashaligned > 10 
                                      or nhashaligned > nhashraw/100):
-                print "Matched", qry, "as", ht.names[tophitid], \
+                print "Matched", qry, ('%.3f'%dur), "sec", \
+                      nhash, "raw hashes", \
+                      "as", ht.names[tophitid], \
                       "at %.3f" % bestaligntime, "s", \
                       "with", nhashaligned, "of", nhashraw, "hashes"
             else:
-                print "NO MATCH for", qry
+                print "NOMATCH", qry, ('%.3f'%dur), "sec", \
+                      nhash, "raw hashes"
+
+    elif cmd == 'precompute':
+        # just precompute fingerprints
+        for file in filenames(files, listflag):
+            hashes = wavfile2hashes(file, density=density, sr=target_sr, 
+                                    n_fft=n_fft, n_hop=n_hop)
+            # strip relative directory components from file name
+            # Also remove leading absolute path (comp == '')
+            relname = '/'.join([comp for comp in file.split('/') 
+                                 if comp != '.' and comp != '..' and comp != ''])
+            root, ext = os.path.splitext(relname)
+            opfname = os.path.join(precompdir, root+precompext)
+            # Make sure the directory exists
+            ensure_dir(opfname)
+            # save the hashes file
+            hashes_save(opfname, hashes)
+            print "wrote", opfname, "(", len(hashes), "hashes)"
 
     else:
         # Adding files - command was 'new' or 'add'
