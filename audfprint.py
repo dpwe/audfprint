@@ -285,7 +285,8 @@ def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shif
                                                     density=density, 
                                                     n_fft=n_fft, 
                                                     n_hop=n_hop)))
-        return hq
+        # remove duplicate elements by pushing through a set
+        return sorted(list(set(hq)))
 
 
 ########### functions to read/write hashes to file for a single track #####
