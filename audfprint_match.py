@@ -60,43 +60,15 @@ import audfprint
 def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
-    root, ext = os.path.splitext(filename)
-    if ext == audfprint.precompext:
-        # short-circuit - precomputed fingerprint file
-        hq = audfprint.hashes_load(filename)
-        if verbose:
-            print "Read precomputed hashes from",filename,"to",len(hq),"hashes"
-        durd = 0
-    else:
-        #print "match_file: sr=",sr
-        d, sr = librosa.load(filename, sr=sr)
-        durd = float(len(d))/sr
-        # Collect landmarks offset by 0..3 quarter-windows
-        #t_hop = 0.02322
-        #win = int(np.round(sr * t_hop))
-        #qwin = win/4
-        qwin = n_hop/4
-        hq = audfprint.landmarks2hashes(
-                  audfprint.peaks2landmarks(
-                      audfprint.find_peaks(d, sr, density=density, 
-                                           n_fft=n_fft, n_hop=n_hop)))
-        hq += audfprint.landmarks2hashes(
-                  audfprint.peaks2landmarks(
-                      audfprint.find_peaks(d[qwin:], sr, density=density, 
-                                           n_fft=n_fft, n_hop=n_hop)))
-        hq += audfprint.landmarks2hashes(
-                 audfprint.peaks2landmarks(
-                     audfprint.find_peaks(d[2*qwin:], sr, density=density, 
-                                           n_fft=n_fft, n_hop=n_hop)))
-        hq += audfprint.landmarks2hashes(
-                 audfprint.peaks2landmarks(
-                     audfprint.find_peaks(d[3*qwin:], sr, density=density, 
-                                           n_fft=n_fft, n_hop=n_hop)))
-        if verbose:
-            print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
+    queryshifts = 4
+    hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
+                                  n_fft=n_fft, n_hop=n_hop, shifts=queryshifts)
+    # Fake durations as largest hash time
+    durd = float(n_hop * hq[-1][0])/sr
+    if verbose:
+        print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
     # Run query
     return match_hashes(ht, hq), durd, len(hq)
-
 
 dotest = False
 if dotest:

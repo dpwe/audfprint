@@ -264,19 +264,28 @@ def hashes2landmarks(hashes):
 # Special extension indicating precomputed fingerprint
 precompext = '.afpt'
 
-def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None):
+def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shifts=1):
     """ Read a soundfile and return its fingerprint hashes as a 
-        list of (time, hash) pairs.  If specified, resample to sr first. """
+        list of (time, hash) pairs.  If specified, resample to sr first. 
+        shifts > 1 causes hashes to be extracted from multiple shifts of 
+        waveform, to reduce frame effects.  """
     root, ext = os.path.splitext(filename)
     if ext == precompext:
         # short-circuit - precomputed fingerprint file
         return hashes_load(filename)
     else:
         [d, sr] = librosa.load(filename, sr=sr)
-        return landmarks2hashes(peaks2landmarks(find_peaks(d, sr, 
-                                                           density=density, 
-                                                           n_fft=n_fft, 
-                                                           n_hop=n_hop)))
+        hq = []
+        for shift in range(shifts):
+            if n_hop == None:
+                n_hop = 256
+            shiftsamps = int(float(shift)/shifts*n_hop)
+            hq += landmarks2hashes(peaks2landmarks(
+                                         find_peaks(d[shiftsamps:], sr, 
+                                                    density=density, 
+                                                    n_fft=n_fft, 
+                                                    n_hop=n_hop)))
+        return hq
 
 
 ########### functions to read/write hashes to file for a single track #####
@@ -452,6 +461,7 @@ Options:
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
   -s <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
+  -i <val>, --shifts <i>          Use this many subframe shifts building fp [default: 1]
   -l, --list                      Input files are lists, not audio
   -v, --verbose                   Verbose reporting
   --version                       Report version number
@@ -481,6 +491,7 @@ def main(argv):
     verbose = args['--verbose']
     files = args['<file>']
     precompdir = args['--precompdir']
+    shifts = int(args['--shifts'])
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
     n_fft = 512
@@ -538,7 +549,7 @@ def main(argv):
         # just precompute fingerprints
         for file in filenames(files, listflag):
             hashes = wavfile2hashes(file, density=density, sr=target_sr, 
-                                    n_fft=n_fft, n_hop=n_hop)
+                                    n_fft=n_fft, n_hop=n_hop, shifts=shifts)
             # strip relative directory components from file name
             # Also remove leading absolute path (comp == '')
             relname = '/'.join([comp for comp in file.split('/') 
