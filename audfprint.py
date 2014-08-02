@@ -460,11 +460,12 @@ Options:
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
-  -s <val>, --samplerate <val>    Resample input files to this [default: 11025]
+  -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <i>          Use this many subframe shifts building fp [default: 1]
   -l, --list                      Input files are lists, not audio
   -v, --verbose                   Verbose reporting
+  -I, --illustrate                Make a plot showing the match
   --version                       Report version number
   --help                          Print this message
 """
@@ -490,6 +491,7 @@ def main(argv):
     samplerate = int(args['--samplerate'])
     listflag = args['--list']
     verbose = args['--verbose']
+    illustrate = args['--illustrate']
     files = args['<file>']
     precompdir = args['--precompdir']
     shifts = int(args['--shifts'])
@@ -542,6 +544,13 @@ def main(argv):
                       "as", ht.names[tophitid], \
                       "at %.3f" % bestaligntime, "s", \
                       "with", nhashaligned, "of", nhashraw, "hashes"
+                if illustrate:
+                    audfprint_match.illustrate_match(ht, qry, 
+                                                     density=density,
+                                                     sr=target_sr, 
+                                                     n_fft=n_fft, 
+                                                     n_hop=n_hop)
+
             else:
                 print "NOMATCH", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes"
