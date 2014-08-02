@@ -188,6 +188,9 @@ def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
                 # Setup the threshold
                 sthresh = spreadpeaks([(peakpos, val)], base=sthresh, 
                                       width=f_sd)
+                # Delete any following peak (threshold should, but be sure)
+                if col < scols:
+                    peaks[peakpos, col] = 0
             else:
                 # delete the peak
                 peaks[peakpos, col-1] = 0
@@ -264,6 +267,9 @@ def hashes2landmarks(hashes):
 # Special extension indicating precomputed fingerprint
 precompext = '.afpt'
 
+# global stores duration of most recently-read soundfile
+soundfiledur = 0.0
+
 def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shifts=1):
     """ Read a soundfile and return its fingerprint hashes as a 
         list of (time, hash) pairs.  If specified, resample to sr first. 
@@ -275,6 +281,10 @@ def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shif
         return hashes_load(filename)
     else:
         [d, sr] = librosa.load(filename, sr=sr)
+        # Store duration in a global because it's hard to handle
+        global soundfiledur
+        soundfiledur = float(len(d))/sr
+        # Calculate hashes with optional part-frame shifts
         hq = []
         for shift in range(shifts):
             if n_hop == None:
@@ -356,7 +366,7 @@ class myTrackObj:
     # the name of the audio file
     fn_audio = None  
 
-def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
+def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None, shifts=1):
     """ Read an audio file and add it to the database
     :params:
       ht : HashTable object
@@ -371,6 +381,8 @@ def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
         size of each FFT
       sr : int (default: None)
         resample input files to this sampling rate
+      shifts : int (default 1)
+        how many sub-frame shifts to apply to waveform
     :returns:
       dur : float
         the duration of the track
@@ -386,13 +398,13 @@ def ingest(ht, filename, density=None, n_hop=None, n_fft=None, sr=None):
     #                                                     density=density, 
     #                                                     n_fft=n_fft, 
     #                                                     n_hop=n_hop)))
-    trackObj = myTrackObj()
-    trackObj.fn_audio = filename
-    hashes = extract_features(trackObj, sr=sr, 
-                              density=density, n_fft=n_fft, n_hop=n_hop)
+    hashes = wavfile2hashes(filename, density=density, sr=sr, 
+                            n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     ht.store(filename, hashes)
     #return (len(d)/float(sr), len(hashes))
-    return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
+    #return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
+    # soundfiledur is set up in wavfile2hashes, use result here
+    return soundfiledur, len(hashes)
 
 # Handy function to build a new hash table from a file glob pattern
 import glob, time
@@ -404,7 +416,7 @@ def glob2hashtable(pattern, density=None):
     totdur = 0.0
     tothashes = 0
     for ix, file in enumerate(filelist):
-        print time.ctime(), "ingesting #", ix, ":", file, " ..."
+        print time.ctime(), "ingesting #", ix, ":", file, "..."
         dur, nhash = ingest(ht, file, density)
         totdur += dur
         tothashes += nhash
@@ -462,7 +474,9 @@ Options:
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
-  -i <val>, --shifts <i>          Use this many subframe shifts building fp [default: 1]
+  -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 1]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
+  -N <val>, --min-count <val>     Minimum number of matches to report [default: 5]
   -l, --list                      Input files are lists, not audio
   -v, --verbose                   Verbose reporting
   -I, --illustrate                Make a plot showing the match
@@ -495,6 +509,8 @@ def main(argv):
     files = args['<file>']
     precompdir = args['--precompdir']
     shifts = int(args['--shifts'])
+    match_win = int(args['--match-win'])
+    min_count = int(args['--min-count'])
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
     n_fft = 512
@@ -525,6 +541,7 @@ def main(argv):
                                                            sr=target_sr, 
                                                            n_fft=n_fft, 
                                                            n_hop=n_hop, 
+                                                           window=match_win, 
                                                            verbose=verbose)
             if len(rslts) == 0:
                 # No matches returned at all
@@ -537,8 +554,8 @@ def main(argv):
                 nhashraw = rslts[0][3]
             # to count as a match, the number of aligned matches must be 
             # greater than 10, or the larger of 4 or 1% of the raw hash matches
-            if nhashaligned > 4 and (nhashaligned > 10 
-                                     or nhashaligned > nhashraw/100):
+            if nhashaligned > min_count and (nhashaligned > 10 
+                                             or nhashaligned > nhashraw/100):
                 print "Matched", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes", \
                       "as", ht.names[tophitid], \
@@ -549,7 +566,8 @@ def main(argv):
                                                      density=density,
                                                      sr=target_sr, 
                                                      n_fft=n_fft, 
-                                                     n_hop=n_hop)
+                                                     n_hop=n_hop, 
+                                                     window=match_win)
 
             else:
                 print "NOMATCH", qry, ('%.3f'%dur), "sec", \
@@ -570,7 +588,8 @@ def main(argv):
             ensure_dir(opfname)
             # save the hashes file
             hashes_save(opfname, hashes)
-            print "wrote", opfname, "(", len(hashes), "hashes)"
+            print "wrote", opfname, "( %d hashes, %.3f sec)" % (len(hashes), 
+                                                               soundfiledur)
 
     else:
         # Adding files - command was 'new' or 'add'
@@ -578,10 +597,11 @@ def main(argv):
         totdur = 0
         tothashes = 0
         for ix, file in enumerate(filenames(files, listflag)):
-            print time.ctime(), "ingesting #", ix, ":", file, " ..."
+            print time.ctime(), "ingesting #", ix, ":", file, "..."
             dur, nhash = ingest(ht, file, density=density,
                                 sr=target_sr, 
-                                n_fft=n_fft, n_hop=n_hop)
+                                n_fft=n_fft, n_hop=n_hop, 
+                                shifts=shifts)
             totdur += dur
             tothashes += nhash
 

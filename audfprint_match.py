@@ -16,7 +16,7 @@ def find_mode(data, window=0):
     bestix = np.argmax(counts)
     return (vals[bestix], counts[bestix])
 
-def match_hashes(ht, hashes, hashesfor=None):
+def match_hashes(ht, hashes, hashesfor=None, window=1):
     """ Match audio against fingerprint hash table.
         Return top N matches as (id, filteredmatches, timoffs, rawmatches)
         If hashesfor specified, return the actual matching hashes for that 
@@ -35,7 +35,6 @@ def match_hashes(ht, hashes, hashesfor=None):
     bestcountsids = sorted(zip(counts, ids), reverse=True)
     # Try the top 100 results
     resultlist = []
-    window = 1
     for rawcount, tid in bestcountsids[:100]:
         (mode, filtcount) = find_mode([time for (id, time, hash, otime) in hits 
                                        if id == tid], 
@@ -53,24 +52,27 @@ def match_hashes(ht, hashes, hashesfor=None):
     else:
         return results
 
-def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, verbose=False):
+def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
     queryshifts = 4
     hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
                                   n_fft=n_fft, n_hop=n_hop, shifts=queryshifts)
     # Fake durations as largest hash time
-    durd = float(n_hop * hq[-1][0])/sr
+    if len(hq) == 0:
+        durd = 0.0
+    else:
+        durd = float(n_hop * hq[-1][0])/sr
     if verbose:
         print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
     # Run query
-    return match_hashes(ht, hq), durd, len(hq)
+    return match_hashes(ht, hq, window=window), durd, len(hq)
 
 # Graphical display of the match
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256):
+def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1):
     """ Show the query fingerprints and the matching ones plotted over a spectrogram """
     # Make the spectrogram
     d, sr = librosa.load(filename, sr=sr)
@@ -87,7 +89,7 @@ def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256)
     hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
                                   n_fft=n_fft, n_hop=n_hop, shifts=queryshifts)
     # Run query, get back the hashes for match zero
-    results, matchhashes = match_hashes(ht, hq, 0)
+    results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
     # Convert the hashes to landmarks
     lms = audfprint.hashes2landmarks(hq)
     mlms = audfprint.hashes2landmarks(matchhashes)
