@@ -278,7 +278,7 @@ def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shif
     root, ext = os.path.splitext(filename)
     if ext == precompext:
         # short-circuit - precomputed fingerprint file
-        return hashes_load(filename)
+        hashes = hashes_load(filename)
     else:
         [d, sr] = librosa.load(filename, sr=sr)
         # Store duration in a global because it's hard to handle
@@ -296,7 +296,10 @@ def wavfile2hashes(filename, sr=None, density=None, n_fft=None, n_hop=None, shif
                                                     n_fft=n_fft, 
                                                     n_hop=n_hop)))
         # remove duplicate elements by pushing through a set
-        return sorted(list(set(hq)))
+        hashes = sorted(list(set(hq)))
+
+    #print "wavfile2hashes: read", len(hashes), "hashes from", filename
+    return hashes
 
 
 ########### functions to read/write hashes to file for a single track #####
@@ -431,16 +434,16 @@ if test:
     ingest(ht, fn)
     ht.save('httest.pklz')
 
-def filenames(filelist, listflag):
-  """ Iterator to yeild all the filenames, possibly interpreting them as list files """
+def filenames(filelist, wavdir, listflag):
+  """ Iterator to yeild all the filenames, possibly interpreting them as list files, prepending wavdir """
   if not listflag:
     for filename in filelist:
-      yield filename
+      yield os.path.join(wavdir, filename)
   else:
     for listfilename in filelist:
       with open(listfilename, 'r') as f:
         for filename in f:
-          yield filename.rstrip('\n')
+          yield os.path.join(wavdir, filename.rstrip('\n'))
 
 # for saving precomputed fprints
 def ensure_dir(fname):
@@ -474,17 +477,18 @@ Options:
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
-  -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 1]
+  -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
   -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
   -N <val>, --min-count <val>     Minimum number of matches to report [default: 5]
   -l, --list                      Input files are lists, not audio
   -v, --verbose                   Verbose reporting
   -I, --illustrate                Make a plot showing the match
+  -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
   --version                       Report version number
   --help                          Print this message
 """
 
-__version__ = 20130527
+__version__ = 20140802
 
 def main(argv):
     args = docopt.docopt(usage, version=__version__) 
@@ -511,6 +515,7 @@ def main(argv):
     shifts = int(args['--shifts'])
     match_win = int(args['--match-win'])
     min_count = int(args['--min-count'])
+    wavdir = args['--wavdir']
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
     n_fft = 512
@@ -533,15 +538,25 @@ def main(argv):
 
     t_hop = n_hop/float(target_sr)
 
+    # set default value for shifts depending on mode
+    if shifts == 0:
+        if cmd == 'match':
+            # Default shifts is 4 for match
+            shifts = 4
+        else:
+            # default shifts is 1 for new/add/precompute
+            shifts = 1
+
     if cmd == 'match':
         # Running query
-        for qry in filenames(files, listflag):
+        for qry in filenames(files, wavdir, listflag):
             rslts, dur, nhash = audfprint_match.match_file(ht, qry, 
                                                            density=density,
                                                            sr=target_sr, 
                                                            n_fft=n_fft, 
                                                            n_hop=n_hop, 
                                                            window=match_win, 
+                                                           shifts=shifts, 
                                                            verbose=verbose)
             if len(rslts) == 0:
                 # No matches returned at all
@@ -554,7 +569,7 @@ def main(argv):
                 nhashraw = rslts[0][3]
             # to count as a match, the number of aligned matches must be 
             # greater than 10, or the larger of 4 or 1% of the raw hash matches
-            if nhashaligned > min_count and (nhashaligned > 10 
+            if nhashaligned >= min_count and (nhashaligned > 10 
                                              or nhashaligned > nhashraw/100):
                 print "Matched", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes", \
@@ -567,7 +582,8 @@ def main(argv):
                                                      sr=target_sr, 
                                                      n_fft=n_fft, 
                                                      n_hop=n_hop, 
-                                                     window=match_win)
+                                                     window=match_win, 
+                                                     shifts=shifts)
 
             else:
                 print "NOMATCH", qry, ('%.3f'%dur), "sec", \
@@ -575,7 +591,7 @@ def main(argv):
 
     elif cmd == 'precompute':
         # just precompute fingerprints
-        for file in filenames(files, listflag):
+        for file in filenames(files, wavdir, listflag):
             hashes = wavfile2hashes(file, density=density, sr=target_sr, 
                                     n_fft=n_fft, n_hop=n_hop, shifts=shifts)
             # strip relative directory components from file name
@@ -596,7 +612,7 @@ def main(argv):
         initticks = time.clock()
         totdur = 0
         tothashes = 0
-        for ix, file in enumerate(filenames(files, listflag)):
+        for ix, file in enumerate(filenames(files, wavdir, listflag)):
             print time.ctime(), "ingesting #", ix, ":", file, "..."
             dur, nhash = ingest(ht, file, density=density,
                                 sr=target_sr, 

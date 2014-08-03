@@ -34,30 +34,35 @@ def match_hashes(ht, hashes, hashesfor=None, window=1):
     # Find all the actual hits for a the most popular ids
     bestcountsids = sorted(zip(counts, ids), reverse=True)
     # Try the top 100 results
-    resultlist = []
+    results = []
     for rawcount, tid in bestcountsids[:100]:
         (mode, filtcount) = find_mode([time for (id, time, hash, otime) in hits 
                                        if id == tid], 
                                       window=window)
-        resultlist.append( (tid, filtcount, mode, rawcount) )
-    results = sorted(resultlist, key=lambda x:x[1], reverse=True)
-
-    if hashesfor is not None:
-        # reconstruct & return the matching hashes from the top hit
-        tid = resultlist[hashesfor][0]
-        mode = resultlist[hashesfor][2]
         matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
                        if id == tid and abs(time - mode) <= window]
-        return results, matchhashes
-    else:
-        return results
+        # matchhashes may include repeats because multiple
+        # ref hashes may match a single query hash under window.  Uniqify:
+        matchhashes = sorted(list(set(matchhashes)))
+        filtcount = len(matchhashes)
+        results.append( (tid, filtcount, mode, rawcount, matchhashes) )
 
-def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, verbose=False):
+    results = sorted(results, key=lambda x:x[1], reverse=True)
+    shortresults = [(tid, filtcount, mode, rawcount) 
+                    for (tid, filtcount, mode, rawcount, matchhashes) in results]
+
+    if hashesfor is not None:
+        return shortresults, results[hashesfor][4]
+    else:
+        return shortresults
+
+
+
+def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
-    queryshifts = 4
     hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
-                                  n_fft=n_fft, n_hop=n_hop, shifts=queryshifts)
+                                  n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     # Fake durations as largest hash time
     if len(hq) == 0:
         durd = 0.0
@@ -72,7 +77,7 @@ def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, windo
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1):
+def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4):
     """ Show the query fingerprints and the matching ones plotted over a spectrogram """
     # Make the spectrogram
     d, sr = librosa.load(filename, sr=sr)
@@ -80,25 +85,23 @@ def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256,
                             window=np.hanning(512+2)[1:-1]))
     S = 20.0*np.log10(np.maximum(S, np.max(S)/1e6))
     S = S - np.max(S)
-    xmax = 700
-    librosa.display.specshow(S[:,:xmax], sr=sr, 
+    librosa.display.specshow(S, sr=sr, 
                              y_axis='linear', x_axis='time', 
                              cmap='gray_r', vmin=-80.0, vmax=0)
     # Do the match
-    queryshifts = 4
     hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
-                                  n_fft=n_fft, n_hop=n_hop, shifts=queryshifts)
+                                  n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     # Run query, get back the hashes for match zero
     results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
     # Convert the hashes to landmarks
     lms = audfprint.hashes2landmarks(hq)
     mlms = audfprint.hashes2landmarks(matchhashes)
     # Overplot on the spectrogram
-    plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms if x[0]+x[3] < xmax]).T, 
-             np.array([[x[1],x[2]] for x in lms if x[0]+x[3] < xmax]).T, 
+    plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms]).T, 
+             np.array([[x[1],x[2]] for x in lms]).T, 
              '.-g')
-    plt.plot(np.array([[x[0], x[0]+x[3]] for x in mlms if x[0]+x[3] < xmax]).T, 
-             np.array([[x[1],x[2]] for x in mlms if x[0]+x[3] < xmax]).T, 
+    plt.plot(np.array([[x[0], x[0]+x[3]] for x in mlms]).T, 
+             np.array([[x[1],x[2]] for x in mlms]).T, 
              '.-r')
     # Add title
     plt.title(filename + " : Matched as " + ht.names[results[0][0]]
