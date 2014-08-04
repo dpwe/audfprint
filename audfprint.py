@@ -30,6 +30,7 @@ maxpksperframe = 5
 
 # Values controlling peaks2landmarks
 targetdf = 31   # +/- 50 bins in freq (LIMITED TO -32..31 IN LANDMARK2HASH)
+mindt    = 2    # min time separation (traditionally 1, upped 2014-08-04)
 targetdt = 63   # max lookahead in time (LIMITED TO <64 IN LANDMARK2HASH)
 maxpairsperpeak=3  # Limit the number of pairs we'll make from each peak
 
@@ -216,10 +217,11 @@ def peaks2landmarks(pklist):
     for col in xrange(scols):
         for peak in pklist[col]:
             pairsthispeak = 0
-            for col2 in xrange(col+1, min(scols, col+targetdt)):
+            for col2 in xrange(col+mindt, min(scols, col+targetdt)):
                 for peak2 in pklist[col2]:
                     if ( (pairsthispeak < maxpairsperpeak)
-                         and abs(peak-peak2) < targetdf):
+                         and abs(peak2-peak) < targetdf
+                         and abs(peak2-peak) + abs(col2-col) > 2  ):
                         # We have a pair!
                         landmarks.append( (col, peak, peak2, col2-col) )
                         pairsthispeak += 1
@@ -569,8 +571,9 @@ def main(argv):
                 nhashraw = rslts[0][3]
             # to count as a match, the number of aligned matches must be 
             # greater than 10, or the larger of 4 or 1% of the raw hash matches
-            if nhashaligned >= min_count and (nhashaligned > 10 
-                                             or nhashaligned > nhashraw/100):
+            #if nhashaligned >= min_count and (nhashaligned > 10 
+            #                                 or nhashaligned > nhashraw/100):
+            if nhashaligned >= min_count:
                 print "Matched", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes", \
                       "as", ht.names[tophitid], \
