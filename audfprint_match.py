@@ -16,6 +16,36 @@ def find_mode(data, window=0):
     bestix = np.argmax(counts)
     return (vals[bestix], counts[bestix])
 
+def locmax(x, indices=False):
+    """ Return a boolean vector of which points in x are local maxima.  
+        End points are peaks if larger than single neighbors.
+        if indices=True, return the indices of the True values instead 
+        of the boolean vector. (originally from audfprint.py)
+    """
+    # x[-1]-1 means last value can be a peak
+    #nbr = np.greater_equal(np.r_[x, x[-1]-1], np.r_[x[0], x])
+    # the np.r_ was killing us, so try an optimization...
+    nbr = np.zeros(len(x)+1, dtype=bool)
+    nbr[0] = True
+    nbr[1:-1] = np.greater_equal(x[1:], x[:-1])
+    maxmask = (nbr[:-1] & ~nbr[1:])
+    if indices:
+        return np.nonzero(maxmask)[0]
+    else:
+        return maxmask
+
+def find_modes(data, threshold=10, window=0):
+    """ Find multiple modes in data,  Report a list of (mode, count) pairs for every mode greater than or equal to threshold.  Only local maxima in counts are returned. """
+    vals = np.unique(data)
+    counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
+    # Put them into an actual vector
+    minval = min(vals)
+    fullvector = np.zeros(max(vals-minval)+1)
+    fullvector[vals-minval] = counts
+    # Find local maxima
+    localmaxes = np.nonzero(locmax(fullvector) & (fullvector > threshold))[0].tolist()
+    return [(localmax+minval, fullvector[localmax]) for localmax in localmaxes]
+
 def match_hashes(ht, hashes, hashesfor=None, window=1):
     """ Match audio against fingerprint hash table.
         Return top N matches as (id, filteredmatches, timoffs, rawmatches)
@@ -36,16 +66,17 @@ def match_hashes(ht, hashes, hashesfor=None, window=1):
     # Try the top 100 results
     results = []
     for rawcount, tid in bestcountsids[:100]:
-        (mode, filtcount) = find_mode([time for (id, time, hash, otime) in hits 
+        modescounts = find_modes([time for (id, time, hash, otime) in hits 
                                        if id == tid], 
                                       window=window)
-        matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
-                       if id == tid and abs(time - mode) <= window]
-        # matchhashes may include repeats because multiple
-        # ref hashes may match a single query hash under window.  Uniqify:
-        matchhashes = sorted(list(set(matchhashes)))
-        filtcount = len(matchhashes)
-        results.append( (tid, filtcount, mode, rawcount, matchhashes) )
+        for (mode, filtcount) in modescounts:
+            matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
+                           if id == tid and abs(time - mode) <= window]
+            # matchhashes may include repeats because multiple
+            # ref hashes may match a single query hash under window.  Uniqify:
+            matchhashes = sorted(list(set(matchhashes)))
+            filtcount = len(matchhashes)
+            results.append( (tid, filtcount, mode, rawcount, matchhashes) )
 
     results = sorted(results, key=lambda x:x[1], reverse=True)
     shortresults = [(tid, filtcount, mode, rawcount) 

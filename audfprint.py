@@ -481,7 +481,8 @@ Options:
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
   -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
-  -N <val>, --min-count <val>     Minimum number of matches to report [default: 5]
+  -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
+  -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -l, --list                      Input files are lists, not audio
   -v, --verbose                   Verbose reporting
   -I, --illustrate                Make a plot showing the match
@@ -517,6 +518,7 @@ def main(argv):
     shifts = int(args['--shifts'])
     match_win = int(args['--match-win'])
     min_count = int(args['--min-count'])
+    max_matches = int(args['--max-matches'])
     wavdir = args['--wavdir']
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
@@ -560,37 +562,36 @@ def main(argv):
                                                            window=match_win, 
                                                            shifts=shifts, 
                                                            verbose=verbose)
+
+            # filter results to keep only the ones with enough hits
+            rslts = [(tophitid, nhashaligned, bestaligntime, nhashraw)
+                     for tophitid, nhashaligned, bestaligntime, nhashraw
+                         in rslts 
+                         if nhashaligned >= min_count]
+
             if len(rslts) == 0:
                 # No matches returned at all
                 nhashaligned = 0
-            else:
-                # figure the number of raw and aligned matches for top hit
-                tophitid = rslts[0][0]
-                nhashaligned = rslts[0][1]
-                bestaligntime = t_hop*float(rslts[0][2])
-                nhashraw = rslts[0][3]
-            # to count as a match, the number of aligned matches must be 
-            # greater than 10, or the larger of 4 or 1% of the raw hash matches
-            #if nhashaligned >= min_count and (nhashaligned > 10 
-            #                                 or nhashaligned > nhashraw/100):
-            if nhashaligned >= min_count:
-                print "Matched", qry, ('%.3f'%dur), "sec", \
-                      nhash, "raw hashes", \
-                      "as", ht.names[tophitid], \
-                      "at %.3f" % bestaligntime, "s", \
-                      "with", nhashaligned, "of", nhashraw, "hashes"
-                if illustrate:
-                    audfprint_match.illustrate_match(ht, qry, 
-                                                     density=density,
-                                                     sr=target_sr, 
-                                                     n_fft=n_fft, 
-                                                     n_hop=n_hop, 
-                                                     window=match_win, 
-                                                     shifts=shifts)
-
-            else:
                 print "NOMATCH", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes"
+            else:
+                for hitix in range(min(len(rslts), max_matches)):
+                    # figure the number of raw and aligned matches for top hit
+                    tophitid, nhashaligned, bestaligntime, nhashraw = \
+                        rslts[hitix]
+                    print "Matched", qry, ('%.3f'%dur), "sec", \
+                        nhash, "raw hashes", \
+                        "as", ht.names[tophitid], \
+                        "at %.3f" % (bestaligntime*t_hop), "s", \
+                        "with", nhashaligned, "of", nhashraw, "hashes"
+                    if illustrate:
+                        audfprint_match.illustrate_match(ht, qry, 
+                                                         density=density,
+                                                         sr=target_sr, 
+                                                         n_fft=n_fft, 
+                                                         n_hop=n_hop, 
+                                                         window=match_win, 
+                                                         shifts=shifts)
 
     elif cmd == 'precompute':
         # just precompute fingerprints
