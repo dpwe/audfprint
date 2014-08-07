@@ -561,6 +561,7 @@ def main(argv):
                                                            n_hop=n_hop, 
                                                            window=match_win, 
                                                            shifts=shifts, 
+                                                           threshcount=min_count, 
                                                            verbose=verbose)
 
             # filter results to keep only the ones with enough hits

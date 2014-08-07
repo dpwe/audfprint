@@ -34,7 +34,7 @@ def locmax(x, indices=False):
     else:
         return maxmask
 
-def find_modes(data, threshold=10, window=0):
+def find_modes(data, threshold=5, window=0):
     """ Find multiple modes in data,  Report a list of (mode, count) pairs for every mode greater than or equal to threshold.  Only local maxima in counts are returned. """
     vals = np.unique(data)
     counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
@@ -43,10 +43,10 @@ def find_modes(data, threshold=10, window=0):
     fullvector = np.zeros(max(vals-minval)+1)
     fullvector[vals-minval] = counts
     # Find local maxima
-    localmaxes = np.nonzero(locmax(fullvector) & (fullvector > threshold))[0].tolist()
+    localmaxes = np.nonzero(locmax(fullvector) & (fullvector >= threshold))[0].tolist()
     return [(localmax+minval, fullvector[localmax]) for localmax in localmaxes]
 
-def match_hashes(ht, hashes, hashesfor=None, window=1):
+def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
     """ Match audio against fingerprint hash table.
         Return top N matches as (id, filteredmatches, timoffs, rawmatches)
         If hashesfor specified, return the actual matching hashes for that 
@@ -68,7 +68,7 @@ def match_hashes(ht, hashes, hashesfor=None, window=1):
     for rawcount, tid in bestcountsids[:100]:
         modescounts = find_modes([time for (id, time, hash, otime) in hits 
                                        if id == tid], 
-                                      window=window)
+                                      window=window, threshold=threshcount)
         for (mode, filtcount) in modescounts:
             matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
                            if id == tid and abs(time - mode) <= window]
@@ -89,7 +89,7 @@ def match_hashes(ht, hashes, hashesfor=None, window=1):
 
 
 
-def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, verbose=False):
+def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, threshcount=5, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
     hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
@@ -102,7 +102,8 @@ def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, windo
     if verbose:
         print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
     # Run query
-    return match_hashes(ht, hq, window=window), durd, len(hq)
+    return match_hashes(ht, hq, window=window, threshcount=threshcount), \
+               durd, len(hq)
 
 # Graphical display of the match
 import matplotlib as mpl
