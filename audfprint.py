@@ -239,13 +239,14 @@ def peaks2landmarks(pklist):
         for peak in pklist[col]:
             pairsthispeak = 0
             for col2 in xrange(col+mindt, min(scols, col+targetdt)):
-                for peak2 in pklist[col2]:
-                    if ( (pairsthispeak < maxpairsperpeak)
-                         and abs(peak2-peak) < targetdf
-                         and abs(peak2-peak) + abs(col2-col) > 2  ):
-                        # We have a pair!
-                        landmarks.append( (col, peak, peak2, col2-col) )
-                        pairsthispeak += 1
+                if (pairsthispeak < maxpairsperpeak):
+                    for peak2 in pklist[col2]:
+                        if ( (pairsthispeak < maxpairsperpeak)
+                             and abs(peak2-peak) < targetdf
+                             and abs(peak2-peak) + abs(col2-col) > 2  ):
+                            # We have a pair!
+                            landmarks.append( (col, peak, peak2, col2-col) )
+                            pairsthispeak += 1
 
     return landmarks
 

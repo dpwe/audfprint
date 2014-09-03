@@ -62,24 +62,34 @@ class HashTable:
         hashmask = (1 << self.hashbits) - 1
         # Try sorting the pairs by hash value, for better locality in storing
         sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
+        # Tried making it an np array to permit vectorization, ends up slower...
+        #sortedpairs = np.array(sorted(timehashpairs, key=lambda x:x[1]), dtype=int)
+        # Keep only the bottom part of the time value
+        #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
+        # Keep only the bottom part of the hash value
+        #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
+        idval = id * self.maxtime
         for time, hash in sortedpairs:
+            # How many already stored for this hash?
+            count = self.counts[hash]
             # Keep only the bottom part of the time value
             time %= self.maxtime
             # Keep only the bottom part of the hash value
             hash &= hashmask
             # Mixin with ID
-            val = (id * self.maxtime + time) #.astype(np.uint32)
-            if self.counts[hash] < self.depth:
+            val = (idval + time) #.astype(np.uint32)
+            if count < self.depth:
                 # insert new val in next empty slot
-                slot = self.counts[hash]
+                #slot = self.counts[hash]
+                self.table[hash, count] = val
             else:
                 # Choose a point at random
-                slot = random.randint(0, self.counts[hash])
-            # Only store if random slot wasn't beyond end
-            if slot < self.depth:
-                self.table[hash, slot] = val
+                slot = random.randint(0, count)
+                # Only store if random slot wasn't beyond end
+                if slot < self.depth:
+                    self.table[hash, slot] = val
             # Update record of number of vals in this bucket
-            self.counts[hash] += 1
+            self.counts[hash] = count + 1
         # Record how many hashes we (attempted to) save for this id
         self.hashesperid[id] += len(timehashpairs)
         # Mark as unsaved
