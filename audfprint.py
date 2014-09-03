@@ -484,6 +484,7 @@ Options:
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -l, --list                      Input files are lists, not audio
+  -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v, --verbose                   Verbose reporting
   -I, --illustrate                Make a plot showing the match
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
@@ -513,6 +514,7 @@ def main(argv):
     listflag = args['--list']
     verbose = args['--verbose']
     illustrate = args['--illustrate']
+    sortbytime = args['--sortbytime']
     files = args['<file>']
     precompdir = args['--precompdir']
     shifts = int(args['--shifts'])
@@ -576,6 +578,8 @@ def main(argv):
                 print "NOMATCH", qry, ('%.3f'%dur), "sec", \
                       nhash, "raw hashes"
             else:
+                if sortbytime:
+                    rslts = sorted(rslts, key=lambda x:-x[2])
                 for hitix in range(min(len(rslts), max_matches)):
                     # figure the number of raw and aligned matches for top hit
                     tophitid, nhashaligned, bestaligntime, nhashraw = \
@@ -592,7 +596,8 @@ def main(argv):
                                                          n_fft=n_fft, 
                                                          n_hop=n_hop, 
                                                          window=match_win, 
-                                                         shifts=shifts)
+                                                         shifts=shifts, 
+                                                         sortbytime=sortbytime)
 
     elif cmd == 'precompute':
         # just precompute fingerprints

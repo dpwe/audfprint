@@ -109,7 +109,7 @@ def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, windo
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4):
+def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, sortbytime=False):
     """ Show the query fingerprints and the matching ones plotted over a spectrogram """
     # Make the spectrogram
     d, sr = librosa.load(filename, sr=sr)
@@ -125,6 +125,8 @@ def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256,
                                   n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     # Run query, get back the hashes for match zero
     results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
+    if sortbytime:
+        results = sorted(results, key=lambda x: -x[2])
     # Convert the hashes to landmarks
     lms = audfprint.hashes2landmarks(hq)
     mlms = audfprint.hashes2landmarks(matchhashes)
