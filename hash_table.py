@@ -60,14 +60,15 @@ class HashTable:
             id = name
         # Now insert the hashes
         hashmask = (1 << self.hashbits) - 1
-        for time, hash in timehashpairs:
+        # Try sorting the pairs by hash value, for better locality in storing
+        sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
+        for time, hash in sortedpairs:
             # Keep only the bottom part of the time value
             time %= self.maxtime
             # Keep only the bottom part of the hash value
             hash &= hashmask
             # Mixin with ID
             val = (id * self.maxtime + time) #.astype(np.uint32)
-            # increment count of vals in this hash bucket
             if self.counts[hash] < self.depth:
                 # insert new val in next empty slot
                 slot = self.counts[hash]

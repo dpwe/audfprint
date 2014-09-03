@@ -65,6 +65,15 @@ __sp_width = None
 __sp_len = None
 __sp_vals = []
 
+#def init_spreadpeaks(npoints=None, width=4.0):
+#    """ optimiziation - set global vals just once, must be called before spreadpeaks or spreadpeaksinvector """
+#    global __sp_width, __sp_len, __sp_vals
+#    if width != __sp_width or npoints != __sp_len:
+#        # Need to calculate new vector
+#        __sp_width = width
+#        __sp_len = npoints
+#        __sp_vals = np.exp(-0.5*((np.arange(-npoints, npoints+1)/float(width))**2))
+
 def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
     """ Generate a vector consisting of the max of a set of Gaussian bumps
     :params:
@@ -83,20 +92,22 @@ def spreadpeaks(peaks, npoints=None, width=4.0, base=None):
     if base is None:
         Y = np.zeros(npoints)
     else:
+        npoints = len(base)
         Y = np.copy(base)
-        npoints = len(Y)
         #binvals = np.arange(len(Y))
         #for pos, val in peaks:
         #   Y = np.maximum(Y, val*np.exp(-0.5*(((binvals - pos)/float(width))**2)))
     global __sp_width, __sp_len, __sp_vals
+    # You can comment out this check if you use init_spreadpeaks
     if width != __sp_width or npoints != __sp_len:
         # Need to calculate new vector
         __sp_width = width
         __sp_len = npoints
         __sp_vals = np.exp(-0.5*((np.arange(-npoints, npoints+1)/float(width))**2))
+    # Now the actual function
     for pos, val in peaks:
         Y = np.maximum(Y, val*__sp_vals[np.arange(npoints) + npoints - pos])
-    
+
     return Y
 
 def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
@@ -134,6 +145,8 @@ def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
         n_fft = 512
     if n_hop is None:
         n_hop = n_fft/2
+    # optimized setup
+    #init_spreadpeaks(npoints=n_fft/2, width=f_sd)
     # Base spectrogram
     #n_fft = int(np.round(sr*t_win))
     #n_hop = int(np.round(sr*t_hop))
@@ -157,6 +170,10 @@ def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
     ## Store sthresh at each column, for debug
     #thr = np.zeros((srows, scols))
     peaks = np.zeros((srows, scols))
+    # optimization of mask update
+    global __sp_vals
+    __sp_pts = len(sthresh)
+    #
     for col in range(scols):
         Scol = S[:, col]
         sdiff = np.maximum(0, Scol - sthresh)
@@ -173,8 +190,12 @@ def find_peaks(d, sr, density=None, n_fft=None, n_hop=None):
                 if Scol[peakpos] > sthresh[peakpos]:
                     #print "frame:", col, " bin:", peakpos, " val:", Scol[peakpos], " thr:", sthresh[peakpos]
                     npeaksfound += 1
-                    sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
-                                          base=sthresh, width=f_sd)
+                    # What we actually want
+                    #sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
+                    #                      base=sthresh, width=f_sd)
+                    # Optimization - inline the core function within spreadpeaks
+                    sthresh = np.maximum(sthresh, Scol[peakpos]*__sp_vals[(__sp_pts - peakpos):(2*__sp_pts - peakpos)])
+                    #
                     peaks[peakpos, col] = 1
         #thr[:, col] = sthresh
         sthresh *= a_dec
@@ -495,7 +516,7 @@ Options:
 __version__ = 20140802
 
 def main(argv):
-    args = docopt.docopt(usage, version=__version__) 
+    args = docopt.docopt(usage, version=__version__, argv=argv[1:]) 
 
     if args['new']:
         cmd = 'new'
