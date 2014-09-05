@@ -78,8 +78,10 @@ def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
             results.append( (tid, filtcount, mode, rawcount, matchhashes) )
 
     results = sorted(results, key=lambda x:x[1], reverse=True)
+    # Make sure again to return only those meeting threshcount (needed??)
     shortresults = [(tid, filtcount, mode, rawcount) 
-                    for (tid, filtcount, mode, rawcount, matchhashes) in results]
+                    for (tid, filtcount, mode, rawcount, matchhashes) in results
+                      if filtcount >= threshcount]
 
     if hashesfor is not None:
         return shortresults, results[hashesfor][4]

@@ -87,6 +87,10 @@ class Analyzer:
 
     # global stores duration of most recently-read soundfile
     soundfiledur = 0.0
+    # .. and total amount of sound processed
+    soundfiletotaldur = 0.0
+    # .. and count of files
+    soundfilecount = 0
 
     def __init__(self, f_sd=30.0, maxpksperframe=5, maxpairsperpeak=3, density=DENSITY, target_sr=11025, n_fft=N_FFT, n_hop=N_HOP, shifts=1):
         self.f_sd = f_sd
@@ -295,7 +299,11 @@ class Analyzer:
         else:
             [d, sr] = librosa.load(filename, sr=self.target_sr)
             # Store duration in a global because it's hard to handle
-            self.soundfiledur = float(len(d))/sr
+            dur = float(len(d))/sr
+            self.soundfiledur = dur
+            # instrumentation to track total amount of sound processed
+            self.soundfiletotaldur += dur
+            self.soundfilecount += 1
             # Calculate hashes with optional part-frame shifts
             hq = []
             for shift in range(self.shifts):
@@ -467,6 +475,52 @@ import docopt
 import time 
 import os
 
+# basic operations, each in a separate function
+
+def file_match(analyzer, ht, qry, match_win, min_count, max_matches, sortbytime, illustrate, verbose):
+    """ Perform a match on a single input file, return result string """
+    rslts, dur, nhash = audfprint_match.match_file(analyzer, ht, qry, 
+                                                   window=match_win, 
+                                                   threshcount=min_count, 
+                                                   verbose=verbose)
+    t_hop = analyzer.n_hop/float(analyzer.target_sr)
+    qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
+    msgrslt = []
+    if len(rslts) == 0:
+        # No matches returned at all
+        nhashaligned = 0
+        msgrslt.append("NOMATCH "+qrymsg)
+    else:
+        if sortbytime:
+            rslts = sorted(rslts, key=lambda x:-x[2])
+        for hitix in range(min(len(rslts), max_matches)):
+            # figure the number of raw and aligned matches for top hit
+            tophitid, nhashaligned, bestaligntime, nhashraw = rslts[hitix]
+            msgrslt.append("Matched " + qrymsg + " as " + ht.names[tophitid] \
+                           + (" at %.3f " % (bestaligntime*t_hop)) + "s " \
+                           + "with " + str(nhashaligned) + " of " + str(nhashraw) + " hashes")
+            if illustrate:
+                audfprint_match.illustrate_match(analyzer, ht, qry, 
+                                                 window=match_win, 
+                                                 sortbytime=sortbytime)
+    return msgrslt
+
+def file_precompute(analyzer, file, precompdir, precompext):
+    """ Perform precompute action for one file """
+    hashes = analyzer.wavfile2hashes(file)
+    # strip relative directory components from file name
+    # Also remove leading absolute path (comp == '')
+    relname = '/'.join([comp for comp in file.split('/') 
+                        if comp != '.' and comp != '..' and comp != ''])
+    root, ext = os.path.splitext(relname)
+    opfname = os.path.join(precompdir, root+precompext)
+    # Make sure the directory exists
+    ensure_dir(opfname)
+    # save the hashes file
+    hashes_save(opfname, hashes)
+    return "wrote " + opfname + " ( %d hashes, %.3f sec)" % (len(hashes), analyzer.soundfiledur)
+
+
 usage = """
 Audio landmark-based fingerprinting.  
 Create a new fingerprint dbase with new, 
@@ -539,6 +593,9 @@ def main(argv):
     n_fft = 512
     n_hop = n_fft/2
 
+    # Keep track of wall time
+    initticks = time.clock()
+
     # Create analyzer object
     analyzer = Analyzer(f_sd=f_sd, maxpksperframe=maxpksperframe, maxpairsperpeak=maxpairsperpeak, 
                         density=density, n_fft=n_fft, n_hop=n_hop, target_sr=target_sr)
@@ -556,9 +613,7 @@ def main(argv):
                 print "samplerate set to",target_sr,"per",dbasename
     else:
         # dummy empty hash table for precompute
-        ht = {'params':[]}
-
-    t_hop = n_hop/float(target_sr)
+        ht = None
 
     # set default value for shifts depending on mode
     if shifts == 0:
@@ -568,79 +623,40 @@ def main(argv):
         else:
             # default shifts is 1 for new/add/precompute
             shifts = 1
-
+    # Store in analyzer
     analyzer.shifts = shifts
 
     if cmd == 'match':
         # Running query
-        for qry in filenames(files, wavdir, listflag):
-            rslts, dur, nhash = audfprint_match.match_file(analyzer, ht, qry, 
-                                                           window=match_win, 
-                                                           threshcount=min_count, 
-                                                           verbose=verbose)
-
-            # filter results to keep only the ones with enough hits
-            rslts = [(tophitid, nhashaligned, bestaligntime, nhashraw)
-                     for tophitid, nhashaligned, bestaligntime, nhashraw
-                         in rslts 
-                         if nhashaligned >= min_count]
-
-            if len(rslts) == 0:
-                # No matches returned at all
-                nhashaligned = 0
-                print "NOMATCH", qry, ('%.3f'%dur), "sec", \
-                      nhash, "raw hashes"
-            else:
-                if sortbytime:
-                    rslts = sorted(rslts, key=lambda x:-x[2])
-                for hitix in range(min(len(rslts), max_matches)):
-                    # figure the number of raw and aligned matches for top hit
-                    tophitid, nhashaligned, bestaligntime, nhashraw = \
-                        rslts[hitix]
-                    print "Matched", qry, ('%.3f'%dur), "sec", \
-                        nhash, "raw hashes", \
-                        "as", ht.names[tophitid], \
-                        "at %.3f" % (bestaligntime*t_hop), "s", \
-                        "with", nhashaligned, "of", nhashraw, "hashes"
-                    if illustrate:
-                        audfprint_match.illustrate_match(analyzer, ht, qry, 
-                                                         window=match_win, 
-                                                         sortbytime=sortbytime)
+        for file in filenames(files, wavdir, listflag):
+            msgs = file_match(analyzer, ht, file, match_win, min_count, 
+                              max_matches, sortbytime, illustrate, verbose)
+            print "\n".join(msgs)
 
     elif cmd == 'precompute':
         # just precompute fingerprints
         for file in filenames(files, wavdir, listflag):
-            hashes = analyzer.wavfile2hashes(file)
-            # strip relative directory components from file name
-            # Also remove leading absolute path (comp == '')
-            relname = '/'.join([comp for comp in file.split('/') 
-                                 if comp != '.' and comp != '..' and comp != ''])
-            root, ext = os.path.splitext(relname)
-            opfname = os.path.join(precompdir, root+precompext)
-            # Make sure the directory exists
-            ensure_dir(opfname)
-            # save the hashes file
-            hashes_save(opfname, hashes)
-            print "wrote", opfname, "( %d hashes, %.3f sec)" % (len(hashes), 
-                                                                analyzer.soundfiledur)
+            msgs = file_precompute(analyzer, file, precompdir, precompext)
+            print "\n".join(msgs)
 
     else:
         # Adding files - command was 'new' or 'add'
-        initticks = time.clock()
-        totdur = 0
         tothashes = 0
         for ix, file in enumerate(filenames(files, wavdir, listflag)):
             print time.ctime(), "ingesting #", ix, ":", file, "..."
             dur, nhash = analyzer.ingest(ht, file)
-            totdur += dur
             tothashes += nhash
 
-        elapsedtime = time.clock() - initticks
         print "Added", tothashes, "hashes", \
-              "(%.1f" % (tothashes/float(totdur)), "hashes/sec)", \
-              "at %.3f" % (elapsedtime/totdur), "x RT"
-        if ht.dirty:
-            ht.save(dbasename, {"samplerate":samplerate})
+              "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur)), "hashes/sec)"
+
+    elapsedtime = time.clock() - initticks
+    totdur = analyzer.soundfiletotaldur
+    print "Processed %d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
+           % (analyzer.soundfilecount, totdur, elapsedtime, (elapsedtime/totdur))
+
+    if ht and ht.dirty:
+        ht.save(dbasename, {"samplerate":samplerate})
 
 
 # Run the main function if called from the command line
