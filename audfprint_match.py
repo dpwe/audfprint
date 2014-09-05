@@ -6,7 +6,6 @@ Fingerprint matching code for audfprint
 2014-05-26 Dan Ellis dpwe@ee.columbia.edu
 """
 import librosa
-import audfprint
 import numpy as np
 
 def find_mode(data, window=0):
@@ -87,13 +86,11 @@ def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
     else:
         return shortresults
 
-
-
-def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, threshcount=5, verbose=False):
+def match_file(analyzer, ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, threshcount=5, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
-    hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
-                                  n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+    hq = analyzer.wavfile2hashes(filename, sr=sr, density=density, 
+                                 n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     # Fake durations as largest hash time
     if len(hq) == 0:
         durd = 0.0
@@ -109,7 +106,7 @@ def match_file(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, windo
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, sortbytime=False):
+def illustrate_match(analyzer, ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, sortbytime=False):
     """ Show the query fingerprints and the matching ones plotted over a spectrogram """
     # Make the spectrogram
     d, sr = librosa.load(filename, sr=sr)
@@ -121,15 +118,15 @@ def illustrate_match(ht, filename, density=None, sr=11025, n_fft=512, n_hop=256,
                              y_axis='linear', x_axis='time', 
                              cmap='gray_r', vmin=-80.0, vmax=0)
     # Do the match
-    hq = audfprint.wavfile2hashes(filename, sr=sr, density=density, 
-                                  n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+    hq = analyzer.wavfile2hashes(filename, sr=sr, density=density, 
+                                 n_fft=n_fft, n_hop=n_hop, shifts=shifts)
     # Run query, get back the hashes for match zero
     results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
     if sortbytime:
         results = sorted(results, key=lambda x: -x[2])
     # Convert the hashes to landmarks
-    lms = audfprint.hashes2landmarks(hq)
-    mlms = audfprint.hashes2landmarks(matchhashes)
+    lms = analyzer.hashes2landmarks(hq)
+    mlms = analyzer.hashes2landmarks(matchhashes)
     # Overplot on the spectrogram
     plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms]).T, 
              np.array([[x[1],x[2]] for x in lms]).T, 
@@ -149,6 +146,7 @@ dotest = False
 if dotest:
     pat = '/Users/dpwe/projects/shazam/Nine_Lives/*mp3'
     qry = 'query.mp3'
+    import audfprint
     ht = audfprint.glob2hashtable(pat)
     rslts, dur, nhash = match_file(ht, qry)
     t_hop = 0.02322
