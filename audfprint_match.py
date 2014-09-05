@@ -86,16 +86,15 @@ def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
     else:
         return shortresults
 
-def match_file(analyzer, ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, threshcount=5, verbose=False):
+def match_file(analyzer, ht, filename, window=1, threshcount=5, verbose=False):
     """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
     """
-    hq = analyzer.wavfile2hashes(filename, sr=sr, density=density, 
-                                 n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+    hq = analyzer.wavfile2hashes(filename)
     # Fake durations as largest hash time
     if len(hq) == 0:
         durd = 0.0
     else:
-        durd = float(n_hop * hq[-1][0])/sr
+        durd = float(analyzer.n_hop * hq[-1][0])/analyzer.target_sr
     if verbose:
         print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
     # Run query
@@ -106,20 +105,19 @@ def match_file(analyzer, ht, filename, density=None, sr=11025, n_fft=512, n_hop=
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-def illustrate_match(analyzer, ht, filename, density=None, sr=11025, n_fft=512, n_hop=256, window=1, shifts=4, sortbytime=False):
+def illustrate_match(analyzer, ht, filename, window=1, sortbytime=False):
     """ Show the query fingerprints and the matching ones plotted over a spectrogram """
     # Make the spectrogram
-    d, sr = librosa.load(filename, sr=sr)
-    S = np.abs(librosa.stft(d, n_fft=512, hop_length=256, 
-                            window=np.hanning(512+2)[1:-1]))
+    d, sr = librosa.load(filename, sr=analyzer.target_sr)
+    S = np.abs(librosa.stft(d, n_fft=analyzer.n_fft, hop_length=analyzer.n_hop, 
+                            window=np.hanning(analyzer.n_fft+2)[1:-1]))
     S = 20.0*np.log10(np.maximum(S, np.max(S)/1e6))
     S = S - np.max(S)
     librosa.display.specshow(S, sr=sr, 
                              y_axis='linear', x_axis='time', 
                              cmap='gray_r', vmin=-80.0, vmax=0)
     # Do the match
-    hq = analyzer.wavfile2hashes(filename, sr=sr, density=density, 
-                                 n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+    hq = analyzer.wavfile2hashes(filename)
     # Run query, get back the hashes for match zero
     results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
     if sortbytime:

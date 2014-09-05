@@ -43,8 +43,16 @@ class Analyzer:
     #t_hop = 0.0232
     # Just specify n_fft
     N_FFT = 512
+    N_HOP = 256
+
+    density = None
+    n_fft = None
+    n_hop = None
     # spectrogram enhancement
     hpf_pole = 0.98
+
+    # How many offsets to provide in analysis
+    shifts = 1
 
     # how wide to spreak peaks
     f_sd = None
@@ -80,10 +88,15 @@ class Analyzer:
     # global stores duration of most recently-read soundfile
     soundfiledur = 0.0
 
-    def __init__(self, f_sd=30.0, maxpksperframe=5, maxpairsperpeak=3):
+    def __init__(self, f_sd=30.0, maxpksperframe=5, maxpairsperpeak=3, density=DENSITY, target_sr=11025, n_fft=N_FFT, n_hop=N_HOP, shifts=1):
         self.f_sd = f_sd
         self.maxpksperframe = maxpksperframe
         self.maxpairsperpeak = maxpairsperpeak
+        self.density = density
+        self.target_sr = target_sr
+        self.n_fft = n_fft
+        self.n_hop = n_hop
+        self.shifts = shifts
 
     def spreadpeaksinvector(self, vector, width=4.0):
         """ Create a blurred version of vector, where each of the local maxes 
@@ -126,7 +139,7 @@ class Analyzer:
             Y = np.maximum(Y, val*self.__sp_vals[np.arange(npoints) + npoints - pos])
         return Y
 
-    def find_peaks(self, d, sr, density=None, n_fft=None, n_hop=None):
+    def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.
             Returns a list of (time_frame, freq_bin) pairs.
 
@@ -137,15 +150,6 @@ class Analyzer:
           sr - int
             Sampling rate of d
 
-          density - int
-            Target hashes per second
-
-          n_fft - int
-            Size of FFT used for STFT analysis in samples
-
-          n_hop - int
-            Sample advance between STFT frames
-
         :returns:
           pklist - list of (int, int)
             Ordered list of landmark peaks found in STFT.  First value of
@@ -153,18 +157,11 @@ class Analyzer:
             n_hop/sr secs), second is the FFT bin (in units of sr/n_fft 
             Hz).
         """
-        # Args 
-        if density is None:
-            density = self.DENSITY
-        if n_fft is None:
-            n_fft = self.NFFT
-        if n_hop is None:
-            n_hop = n_fft/2
         # masking envelope decay constant
-        a_dec = (1.0 - 0.01*(density*np.sqrt(n_hop/352.8)/35.0))**(1.0/self.OVERSAMP)
+        a_dec = (1.0 - 0.01*(self.density*np.sqrt(self.n_hop/352.8)/35.0))**(1.0/self.OVERSAMP)
         # Take spectrogram
-        mywin = np.hanning(n_fft+2)[1:-1]
-        S = np.abs(librosa.stft(d, n_fft=n_fft, hop_length=n_hop, window=mywin))
+        mywin = np.hanning(self.n_fft+2)[1:-1]
+        S = np.abs(librosa.stft(d, n_fft=self.n_fft, hop_length=self.n_hop, window=mywin))
         S = np.log(np.maximum(S, np.max(S)/1e6))
         S = S - np.mean(S)
         # High-pass filter onset emphasis
@@ -286,7 +283,7 @@ class Analyzer:
             landmarks.append( (time, bin1, bin1+dbin, dtime) )
         return landmarks
 
-    def wavfile2hashes(self, filename, sr=None, density=None, n_fft=None, n_hop=None, shifts=1):
+    def wavfile2hashes(self, filename):
         """ Read a soundfile and return its fingerprint hashes as a 
             list of (time, hash) pairs.  If specified, resample to sr first. 
             shifts > 1 causes hashes to be extracted from multiple shifts of 
@@ -296,20 +293,15 @@ class Analyzer:
             # short-circuit - precomputed fingerprint file
             hashes = self.hashes_load(filename)
         else:
-            [d, sr] = librosa.load(filename, sr=sr)
+            [d, sr] = librosa.load(filename, sr=self.target_sr)
             # Store duration in a global because it's hard to handle
             self.soundfiledur = float(len(d))/sr
             # Calculate hashes with optional part-frame shifts
             hq = []
-            for shift in range(shifts):
-                if n_hop == None:
-                    n_hop = 256
-                shiftsamps = int(float(shift)/shifts*n_hop)
+            for shift in range(self.shifts):
+                shiftsamps = int(float(shift)/self.shifts*self.n_hop)
                 hq += self.landmarks2hashes(self.peaks2landmarks(
-                                               self.find_peaks(d[shiftsamps:], sr, 
-                                                               density=density, 
-                                                               n_fft=n_fft, 
-                                                               n_hop=n_hop)))
+                                               self.find_peaks(d[shiftsamps:], sr)))
             # remove duplicate elements by pushing through a set
             hashes = sorted(list(set(hq)))
 
@@ -318,23 +310,13 @@ class Analyzer:
 
     ########### functions to link to actual hash table index database #######
 
-    def ingest(self, ht, filename, density=None, n_hop=None, n_fft=None, sr=None, shifts=1):
+    def ingest(self, ht, filename):
         """ Read an audio file and add it to the database
         :params:
           ht : HashTable object
             the hash table to add to
           filename : str
             name of the soundfile to add
-          density : float (default: None)
-            the target density of landmarks per sec
-          n_hop : int (default: None)
-            hop in samples between frames
-          n_fft : int (default: None)
-            size of each FFT
-          sr : int (default: None)
-            resample input files to this sampling rate
-          shifts : int (default 1)
-            how many sub-frame shifts to apply to waveform
         :returns:
           dur : float
             the duration of the track
@@ -350,8 +332,7 @@ class Analyzer:
         #                                                     density=density, 
         #                                                     n_fft=n_fft, 
         #                                                     n_hop=n_hop)))
-        hashes = self.wavfile2hashes(filename, density=density, sr=sr, 
-                                     n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+        hashes = self.wavfile2hashes(filename)
         ht.store(filename, hashes)
         #return (len(d)/float(sr), len(hashes))
         #return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
@@ -422,17 +403,20 @@ def extract_features(track_obj, *args, **kwargs):
         n_hop = kwargs["n_hop"]
     if "sr" in kwargs:
         sr = kwargs["sr"]
-    return analyzer.wavfile2hashes(track_obj.fn_audio, sr=sr, density=density, 
-                                   n_fft=n_fft, n_hop=n_hop)
+    analyzer.density = density
+    analyzer.n_fft = n_fft
+    analyzer.n_hop = n_hop
+    analyzer.target_sr = sr
+    return analyzer.wavfile2hashes(track_obj.fn_audio)
 
 
 # Handy function to build a new hash table from a file glob pattern
 import glob, time
-def glob2hashtable(pattern, density=None):
+def glob2hashtable(pattern, density=20.0):
     """ Build a hash table from the files matching a glob pattern """
     global analyzer
     if analyzer == None:
-        analyzer = Analyzer()
+        analyzer = Analyzer(density=density)
 
     ht = hash_table.HashTable()
     filelist = glob.glob(pattern)
@@ -441,7 +425,7 @@ def glob2hashtable(pattern, density=None):
     tothashes = 0
     for ix, file in enumerate(filelist):
         print time.ctime(), "ingesting #", ix, ":", file, "..."
-        dur, nhash = analyzer.ingest(ht, file, density)
+        dur, nhash = analyzer.ingest(ht, file)
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
@@ -556,7 +540,8 @@ def main(argv):
     n_hop = n_fft/2
 
     # Create analyzer object
-    analyzer = Analyzer(f_sd=f_sd, maxpksperframe=maxpksperframe, maxpairsperpeak=maxpairsperpeak)
+    analyzer = Analyzer(f_sd=f_sd, maxpksperframe=maxpksperframe, maxpairsperpeak=maxpairsperpeak, 
+                        density=density, n_fft=n_fft, n_hop=n_hop, target_sr=target_sr)
 
     if cmd == 'new':
         # Create a new hash table
@@ -584,16 +569,13 @@ def main(argv):
             # default shifts is 1 for new/add/precompute
             shifts = 1
 
+    analyzer.shifts = shifts
+
     if cmd == 'match':
         # Running query
         for qry in filenames(files, wavdir, listflag):
             rslts, dur, nhash = audfprint_match.match_file(analyzer, ht, qry, 
-                                                           density=density,
-                                                           sr=target_sr, 
-                                                           n_fft=n_fft, 
-                                                           n_hop=n_hop, 
                                                            window=match_win, 
-                                                           shifts=shifts, 
                                                            threshcount=min_count, 
                                                            verbose=verbose)
 
@@ -622,19 +604,13 @@ def main(argv):
                         "with", nhashaligned, "of", nhashraw, "hashes"
                     if illustrate:
                         audfprint_match.illustrate_match(analyzer, ht, qry, 
-                                                         density=density,
-                                                         sr=target_sr, 
-                                                         n_fft=n_fft, 
-                                                         n_hop=n_hop, 
                                                          window=match_win, 
-                                                         shifts=shifts, 
                                                          sortbytime=sortbytime)
 
     elif cmd == 'precompute':
         # just precompute fingerprints
         for file in filenames(files, wavdir, listflag):
-            hashes = analyzer.wavfile2hashes(file, density=density, sr=target_sr, 
-                                             n_fft=n_fft, n_hop=n_hop, shifts=shifts)
+            hashes = analyzer.wavfile2hashes(file)
             # strip relative directory components from file name
             # Also remove leading absolute path (comp == '')
             relname = '/'.join([comp for comp in file.split('/') 
@@ -655,10 +631,7 @@ def main(argv):
         tothashes = 0
         for ix, file in enumerate(filenames(files, wavdir, listflag)):
             print time.ctime(), "ingesting #", ix, ":", file, "..."
-            dur, nhash = analyzer.ingest(ht, file, density=density,
-                                         sr=target_sr, 
-                                         n_fft=n_fft, n_hop=n_hop, 
-                                         shifts=shifts)
+            dur, nhash = analyzer.ingest(ht, file)
             totdur += dur
             tothashes += nhash
 
