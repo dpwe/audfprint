@@ -524,17 +524,29 @@ def file_precompute(analyzer, file, precompdir, precompext):
 
 def hash_sender(filename_generator, analyzer, hqueue):
     """ function that is run in a separate thread to generate the hashes for a sequence of files and push them onto hqueue """
+    ix = 0
     for filename in filename_generator:
         hashes = analyzer.wavfile2hashes(filename)
         #print "hash_sender: sending", filename, "and", len(hashes), "hashes"
         #hqueue.put_nowait( (filename, hashes, analyzer.soundfiledur) )
         hqueue.send( (filename, hashes, analyzer.soundfiledur) )
+        ix += 1
     # Send empty data to indicate end
     #hqueue.put_nowait( (None, None, 0.0) )  # Keep pushing data into pipe
     hqueue.send( (None, None, 0.0) )  # Keep pushing data into pipe
     # Close out
     #hqueue.close()
     #hqueue.join_thread()
+
+def make_ht_from_list(analyzer, filelist, ht, pipe):
+    """ Populate a hash table from a list """
+    for filename in filelist:
+        hashes = analyzer.wavfile2hashes(filename)
+        ht.store(filename, hashes)
+    if pipe:
+        pipe.send(ht)
+    else:
+        return ht
 
 usage = """
 Audio landmark-based fingerprinting.  
@@ -663,6 +675,34 @@ def main(argv):
         for file in filenames(files, wavdir, listflag):
             msgs = file_precompute(analyzer, file, precompdir, precompext)
             print "\n".join(msgs)
+    
+    elif multiproc and cmd == "new":
+        # run nthreads in parallel
+        import multiprocessing
+        hts = [ht]
+        filelists = [[]]
+        nthreads = 4
+        for i in range(nthreads):
+            hts.append(hash_table.HashTable(hashbits=hashbits, depth=bucketsize, maxtime=maxtime))
+            filelists.append([])
+        # unpack all the files into nthreads lists
+        for ix, file in enumerate(filenames(files, wavdir, listflag)):
+            filelists[ix % nthreads].append(file)
+        # Run other processes
+        rx = [[] for i in range(nthreads)]
+        tx = [[] for i in range(nthreads)]
+        pr = [[] for i in range(nthreads)]
+        for i in range(nthreads):
+            rx[i], tx[i] = multiprocessing.Pipe(False)
+            pr[i] = multiprocessing.Process(target=make_ht_from_list, 
+                                            args=(analyzer, filelists[i], ht, tx[i]))
+            pr[i].start()
+        # gather
+        for i in range(nthreads):
+            htx = rx[i].recv()
+            print "ht",i,"has",len(htx.names),"files",sum(htx.counts),"hashes"
+            ht.merge(htx)
+            pr[i].join()
 
     elif multiproc:
         # add tracks with experimental pipeline
@@ -670,7 +710,8 @@ def main(argv):
         # Setup a separate process to generate hashes
         #q = multiprocessing.Queue()
         rx, q = multiprocessing.Pipe(False)
-        p = multiprocessing.Process(target=hash_sender, args=(filenames(files, wavdir, listflag), analyzer, q))
+        p = multiprocessing.Process(target=hash_sender, 
+                                    args=(filenames(files, wavdir, listflag), analyzer, q))
         p.start()
         running = True
         ix = 0
@@ -681,8 +722,8 @@ def main(argv):
             filename, hashes, dur = rx.recv()
             #print "main: got", filename
             if filename:
+                print time.ctime(), "ingesting #", ix, ":", filename, "(", len(hashes), "hashes) ..."
                 ht.store(filename, hashes)
-                print time.ctime(), "ingesting #", ix, ":", filename, "..."
                 tothashes += len(hashes)
                 totdur += dur
                 ix += 1

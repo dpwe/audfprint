@@ -204,7 +204,7 @@ class HashTable:
         self.hashesperid += ht.hashesperid
         # All the table values need to be increased by the ncurrent
         idoffset = self.maxtime * ncurrent
-        for hash in xrange(size):
+        for hash in np.nonzero(ht.counts)[0]:
             if self.counts[hash] + ht.counts[hash] <= self.depth:
                 self.table[hash, self.counts[hash]:(self.counts[hash]+ht.counts[hash])] \
                    = ht.table[hash, :ht.counts[hash]] + idoffset
