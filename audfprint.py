@@ -667,8 +667,8 @@ def main(argv):
         # Running queries in parallel
         import joblib
         nthreads = 4
-        msgslist = joblib.Parallel(n_jobs=nthreads)(delayed(file_match)(analyzer, ht, file, match_win, min_count, max_matches, sortbytime, illustrate, verbose) for file in filenames(files, wavdir, listflag))
-        print ["\n".join(msgs) for msgs in msgslist]
+        msgslist = joblib.Parallel(n_jobs=nthreads)(joblib.delayed(file_match)(analyzer, ht, file, match_win, min_count, max_matches, sortbytime, illustrate, verbose) for file in filenames(files, wavdir, listflag))
+        print "\n".join(["\n".join(msgs) for msgs in msgslist])
 
     elif cmd == 'match':
         # Running query
@@ -683,36 +683,48 @@ def main(argv):
             msgs = file_precompute(analyzer, file, precompdir, precompext)
             print "\n".join(msgs)
     
-    elif multiproc and cmd == "new":
-        # run nthreads in parallel
+    elif multiproc: # and cmd == "new":
+        # run nthreads in parallel to add new files to existing HT
         import multiprocessing
-        hts = [ht]
-        filelists = [[]]
         nthreads = 4
-        for i in range(nthreads):
-            hts.append(hash_table.HashTable(hashbits=hashbits, depth=bucketsize, maxtime=maxtime))
-            filelists.append([])
+        # lists store per-process parameters
+        # Pipes to transfer results
+        rx = [[] for i in range(nthreads)]
+        tx = [[] for i in range(nthreads)]
+        # Process objects
+        pr = [[] for i in range(nthreads)]
+        # Lists of the distinct files
+        filelists = [[] for i in range(nthreads)]
         # unpack all the files into nthreads lists
         for ix, file in enumerate(filenames(files, wavdir, listflag)):
             filelists[ix % nthreads].append(file)
-        # Run other processes
-        rx = [[] for i in range(nthreads)]
-        tx = [[] for i in range(nthreads)]
-        pr = [[] for i in range(nthreads)]
+        # Launch each of the individual processes
         for i in range(nthreads):
             rx[i], tx[i] = multiprocessing.Pipe(False)
             pr[i] = multiprocessing.Process(target=make_ht_from_list, 
                                             args=(analyzer, filelists[i], ht, tx[i]))
             pr[i].start()
-        # gather
+        # gather results when they all finish
         for i in range(nthreads):
+            # thread passes back serialized hash table structure
             htx = rx[i].recv()
             print "ht",i,"has",len(htx.names),"files",sum(htx.counts),"hashes"
-            ht.merge(htx)
+            if len(ht.counts) == 0:
+                # Avoid merge into empty hash table, just keep the first one
+                ht = htx
+            else:
+                # merge in all the new items, hash entries
+                ht.merge(htx)
+            # finish that thread...
             pr[i].join()
 
     elif multiproc:
         # add tracks with experimental pipeline
+        # This version is no longer run.  It sets up separate processes for 
+        # analyze (wavfile2hashes) and ht.store.  However, it seems like it 
+        # gets blocked in the pipe that transfers between them, because it 
+        # runs slower.  Anyway, the compute time is something like 80% in 
+        # wavfile2hashes, so it would only effect a marginal speedup.
         import multiprocessing
         # Setup a separate process to generate hashes
         #q = multiprocessing.Queue()
