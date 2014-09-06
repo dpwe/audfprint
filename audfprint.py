@@ -6,6 +6,7 @@ Port of the Matlab implementation.
 
 2014-05-25 Dan Ellis dpwe@ee.columbia.edu
 """
+from __future__ import print_function
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -315,7 +316,7 @@ class Analyzer:
             # remove duplicate elements by pushing through a set
             hashes = sorted(list(set(hq)))
 
-        #print "wavfile2hashes: read", len(hashes), "hashes from", filename
+        #print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
 
     ########### functions to link to actual hash table index database #######
@@ -334,7 +335,7 @@ class Analyzer:
             the number of hashes it mapped into
         """
         #sr = 11025
-        #print "ingest: sr=",sr
+        #print("ingest: sr=",sr)
         #d, sr = librosa.load(filename, sr=sr)
         # librosa.load on mp3 files prepends 396 samples compared 
         # to Matlab audioread ??
@@ -434,12 +435,12 @@ def glob2hashtable(pattern, density=20.0):
     totdur = 0.0
     tothashes = 0
     for ix, file in enumerate(filelist):
-        print time.ctime(), "ingesting #", ix, ":", file, "..."
+        print(time.ctime(), "ingesting #", ix, ":", file, "...")
         dur, nhash = analyzer.ingest(ht, file)
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
-    print "Added",tothashes,"(",tothashes/float(totdur),"hashes/sec) at ", elapsedtime/totdur, "x RT"
+    print("Added",tothashes,"(",tothashes/float(totdur),"hashes/sec) at ", elapsedtime/totdur, "x RT")
     return ht
 
 test = False
@@ -480,27 +481,37 @@ import os
 # basic operations, each in a separate function
 
 def file_match(analyzer, ht, qry, match_win, min_count, max_matches, sortbytime, illustrate, verbose):
-    """ Perform a match on a single input file, return result string """
+    """ Perform a match on a single input file, return list of message strings """
     rslts, dur, nhash = audfprint_match.match_file(analyzer, ht, qry, 
                                                    window=match_win, 
                                                    threshcount=min_count, 
                                                    verbose=verbose)
     t_hop = analyzer.n_hop/float(analyzer.target_sr)
-    qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
+    if verbose:
+        qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
+    else:
+        qrymsg = qry
+
     msgrslt = []
     if len(rslts) == 0:
         # No matches returned at all
         nhashaligned = 0
-        msgrslt.append("NOMATCH "+qrymsg)
+        if verbose:
+            msgrslt.append("NOMATCH "+qrymsg)
+        else:
+            msgrslt.append(qrymsg+"\t")
     else:
         if sortbytime:
             rslts = sorted(rslts, key=lambda x:-x[2])
         for hitix in range(min(len(rslts), max_matches)):
             # figure the number of raw and aligned matches for top hit
             tophitid, nhashaligned, bestaligntime, nhashraw = rslts[hitix]
-            msgrslt.append("Matched " + qrymsg + " as " + ht.names[tophitid] \
+            if verbose:
+                msgrslt.append("Matched " + qrymsg + " as " + ht.names[tophitid] \
                            + (" at %.3f " % (bestaligntime*t_hop)) + "s " \
                            + "with " + str(nhashaligned) + " of " + str(nhashraw) + " hashes")
+            else:
+                msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
             if illustrate:
                 audfprint_match.illustrate_match(analyzer, ht, qry, 
                                                  window=match_win, 
@@ -508,7 +519,7 @@ def file_match(analyzer, ht, qry, match_win, min_count, max_matches, sortbytime,
     return msgrslt
 
 def file_precompute(analyzer, file, precompdir, precompext):
-    """ Perform precompute action for one file """
+    """ Perform precompute action for one file, return list of message strings """
     hashes = analyzer.wavfile2hashes(file)
     # strip relative directory components from file name
     # Also remove leading absolute path (comp == '')
@@ -520,26 +531,10 @@ def file_precompute(analyzer, file, precompdir, precompext):
     ensure_dir(opfname)
     # save the hashes file
     hashes_save(opfname, hashes)
-    return "wrote " + opfname + " ( %d hashes, %.3f sec)" % (len(hashes), analyzer.soundfiledur)
+    return ["wrote " + opfname + " ( %d hashes, %.3f sec)" % (len(hashes), analyzer.soundfiledur)]
 
-def hash_sender(filename_generator, analyzer, hqueue):
-    """ function that is run in a separate thread to generate the hashes for a sequence of files and push them onto hqueue """
-    ix = 0
-    for filename in filename_generator:
-        hashes = analyzer.wavfile2hashes(filename)
-        #print "hash_sender: sending", filename, "and", len(hashes), "hashes"
-        #hqueue.put_nowait( (filename, hashes, analyzer.soundfiledur) )
-        hqueue.send( (filename, hashes, analyzer.soundfiledur) )
-        ix += 1
-    # Send empty data to indicate end
-    #hqueue.put_nowait( (None, None, 0.0) )  # Keep pushing data into pipe
-    hqueue.send( (None, None, 0.0) )  # Keep pushing data into pipe
-    # Close out
-    #hqueue.close()
-    #hqueue.join_thread()
-
-def make_ht_from_list(analyzer, filelist, ht, pipe):
-    """ Populate a hash table from a list """
+def make_ht_from_list(analyzer, filelist, ht, pipe=None):
+    """ Populate a hash table from a list, used as target for multiprocess division.  pipe is a pipe over which to push back the result, else return it """
     for filename in filelist:
         hashes = analyzer.wavfile2hashes(filename)
         ht.store(filename, hashes)
@@ -548,6 +543,7 @@ def make_ht_from_list(analyzer, filelist, ht, pipe):
     else:
         return ht
 
+# CLI specified via usage message thanks to docopt
 usage = """
 Audio landmark-based fingerprinting.  
 Create a new fingerprint dbase with new, 
@@ -573,9 +569,10 @@ Options:
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
   -H <val>, --ncores <val>        Number of processes to spawn in --multiproc mode [default: 4]
+  -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
-  -v, --verbose                   Verbose reporting
+  -v <val>, --verbose <val>       Verbosity level [default: 1]
   -I, --illustrate                Make a plot showing the match
   -M, --multiproc                 Experimental multi-core support
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
@@ -583,7 +580,7 @@ Options:
   --help                          Print this message
 """
 
-__version__ = 20140802
+__version__ = 20140906
 
 def main(argv):
     # Other globals set from command line
@@ -605,7 +602,7 @@ def main(argv):
     maxtime = int(args['--maxtime'])
     samplerate = int(args['--samplerate'])
     listflag = args['--list']
-    verbose = args['--verbose']
+    verbose = int(args['--verbose'])
     illustrate = args['--illustrate']
     multiproc = args['--multiproc']
     sortbytime = args['--sortbytime']
@@ -616,17 +613,25 @@ def main(argv):
     min_count = int(args['--min-count'])
     max_matches = int(args['--max-matches'])
     wavdir = args['--wavdir']
+    opfile = args['--opfile']
     maxpksperframe = int(args['--pks-per-frame'])
     maxpairsperpeak = int(args['--fanout'])
     f_sd = float(args['--freq-sd'])
     ncores = int(args['--ncores'])
+
+    # Setup output
+    if opfile and len(opfile):
+        f = open(opfile, "w")
+        report = lambda list: [f.write(msg+"\n") for msg in list]
+    else:
+        report = lambda list: [print(msg) for msg in list]
 
     # Setup multiprocessing
     if multiproc:
         import multiprocessing  # for new/add
         import joblib           # for match
         if ncores < 2:
-            print "You must specify at least 2 cores for multiproc mode"
+            print("You must specify at least 2 cores for multiproc mode")
             return
 
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
@@ -651,7 +656,7 @@ def main(argv):
         if 'samplerate' in ht.params:
             if ht.params['samplerate'] != target_sr:
                 target_sr = ht.params['samplerate']
-                print "samplerate set to",target_sr,"per",dbasename
+                print("samplerate set to",target_sr,"per",dbasename)
     else:
         # dummy empty hash table for precompute
         ht = None
@@ -667,7 +672,10 @@ def main(argv):
     # Store in analyzer
     analyzer.shifts = shifts
 
+    #######################
     # Run the main commmand
+    #######################
+
     if cmd == 'merge':
         # files are other hash tables, merge them in
         for file in filenames(files, wavdir, listflag):
@@ -681,13 +689,14 @@ def main(argv):
                                                                                   precompdir, 
                                                                                   precompext) 
                                                   for file in filenames(files, wavdir, listflag))
-        print "\n".join(["\n".join(msgs) for msgs in msgslist])
+        # Collapse into a single list of messages
+        for msgs in msgslist:
+            report(msgs)
     
     elif cmd == 'precompute':
         # just precompute fingerprints, single core
         for file in filenames(files, wavdir, listflag):
-            msgs = file_precompute(analyzer, file, precompdir, precompext)
-            print "\n".join(msgs)
+            report(file_precompute(analyzer, file, precompdir, precompext))
     
     elif cmd == 'match' and multiproc:
         # Running queries in parallel
@@ -697,14 +706,15 @@ def main(argv):
                                                                              sortbytime, illustrate, 
                                                                              verbose) 
                                                   for file in filenames(files, wavdir, listflag))
-        print "\n".join(["\n".join(msgs) for msgs in msgslist])
-
+        for msgs in msgslist:
+            report(msgs)
+    
     elif cmd == 'match':
         # Running query, single-core mode
         for file in filenames(files, wavdir, listflag):
             msgs = file_match(analyzer, ht, file, match_win, min_count, 
                               max_matches, sortbytime, illustrate, verbose)
-            print "\n".join(msgs)
+            report(msgs)
 
     elif multiproc: # and cmd == "new":
         # run ncores in parallel to add new files to existing HT
@@ -729,7 +739,8 @@ def main(argv):
         for i in range(ncores):
             # thread passes back serialized hash table structure
             htx = rx[i].recv()
-            print "ht",i,"has",len(htx.names),"files",sum(htx.counts),"hashes"
+            report(["ht " + str(i) + " has " + str(len(htx.names)) + " files " 
+                    + str(sum(htx.counts)) + " hashes"])
             if len(ht.counts) == 0:
                 # Avoid merge into empty hash table, just keep the first one
                 ht = htx
@@ -743,18 +754,18 @@ def main(argv):
         # Adding files - command was 'new' or 'add'
         tothashes = 0
         for ix, file in enumerate(filenames(files, wavdir, listflag)):
-            print time.ctime(), "ingesting #", ix, ":", file, "..."
+            report([time.ctime() + " ingesting #" + str(ix) + ":" + file + " ..."])
             dur, nhash = analyzer.ingest(ht, file)
             tothashes += nhash
 
-        print "Added", tothashes, "hashes", \
-              "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur)), "hashes/sec)"
+        report(["Added " +  str(tothashes) + " hashes "
+                + "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur)) + " hashes/sec)"])
 
     elapsedtime = time.clock() - initticks
     totdur = analyzer.soundfiletotaldur
     if totdur > 0.:
-        print "Processed %d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
-            % (analyzer.soundfilecount, totdur, elapsedtime, (elapsedtime/totdur))
+        print("Processed %d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
+              % (analyzer.soundfilecount, totdur, elapsedtime, (elapsedtime/totdur)))
 
     if ht and ht.dirty:
         ht.save(dbasename, {"samplerate":samplerate})
