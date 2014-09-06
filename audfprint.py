@@ -571,7 +571,8 @@ Options:
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
-  -P <val>, --pks-per-frame <val>   Maximum number of peaks per frame [default: 5]
+  -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
+  -H <val>, --ncores <val>        Number of processes to spawn in --multiproc mode [default: 4]
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v, --verbose                   Verbose reporting
@@ -618,6 +619,15 @@ def main(argv):
     maxpksperframe = int(args['--pks-per-frame'])
     maxpairsperpeak = int(args['--fanout'])
     f_sd = float(args['--freq-sd'])
+    ncores = int(args['--ncores'])
+
+    # Setup multiprocessing
+    if multiproc:
+        import multiprocessing  # for new/add
+        import joblib           # for match
+        if ncores < 2:
+            print "You must specify at least 2 cores for multiproc mode"
+            return
 
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     target_sr = samplerate # not always 11025, but always n_fft=512
@@ -657,55 +667,66 @@ def main(argv):
     # Store in analyzer
     analyzer.shifts = shifts
 
+    # Run the main commmand
     if cmd == 'merge':
         # files are other hash tables, merge them in
         for file in filenames(files, wavdir, listflag):
             ht2 = hash_table.HashTable(file)
             ht.merge(ht2)
 
-    elif multiproc and cmd == 'match':
+    elif cmd == 'precompute' and multiproc:
+        # precompute fingerprints with joblib
+        msgslist = joblib.Parallel(n_jobs=ncores)(joblib.delayed(file_precompute)(analyzer, 
+                                                                                  file, 
+                                                                                  precompdir, 
+                                                                                  precompext) 
+                                                  for file in filenames(files, wavdir, listflag))
+        print "\n".join(["\n".join(msgs) for msgs in msgslist])
+    
+    elif cmd == 'precompute':
+        # just precompute fingerprints, single core
+        for file in filenames(files, wavdir, listflag):
+            msgs = file_precompute(analyzer, file, precompdir, precompext)
+            print "\n".join(msgs)
+    
+    elif cmd == 'match' and multiproc:
         # Running queries in parallel
-        import joblib
-        nthreads = 4
-        msgslist = joblib.Parallel(n_jobs=nthreads)(joblib.delayed(file_match)(analyzer, ht, file, match_win, min_count, max_matches, sortbytime, illustrate, verbose) for file in filenames(files, wavdir, listflag))
+        msgslist = joblib.Parallel(n_jobs=ncores)(joblib.delayed(file_match)(analyzer, 
+                                                                             ht, file, match_win, 
+                                                                             min_count, max_matches, 
+                                                                             sortbytime, illustrate, 
+                                                                             verbose) 
+                                                  for file in filenames(files, wavdir, listflag))
         print "\n".join(["\n".join(msgs) for msgs in msgslist])
 
     elif cmd == 'match':
-        # Running query
+        # Running query, single-core mode
         for file in filenames(files, wavdir, listflag):
             msgs = file_match(analyzer, ht, file, match_win, min_count, 
                               max_matches, sortbytime, illustrate, verbose)
             print "\n".join(msgs)
 
-    elif cmd == 'precompute':
-        # just precompute fingerprints
-        for file in filenames(files, wavdir, listflag):
-            msgs = file_precompute(analyzer, file, precompdir, precompext)
-            print "\n".join(msgs)
-    
     elif multiproc: # and cmd == "new":
-        # run nthreads in parallel to add new files to existing HT
-        import multiprocessing
-        nthreads = 4
+        # run ncores in parallel to add new files to existing HT
         # lists store per-process parameters
         # Pipes to transfer results
-        rx = [[] for i in range(nthreads)]
-        tx = [[] for i in range(nthreads)]
+        rx = [[] for i in range(ncores)]
+        tx = [[] for i in range(ncores)]
         # Process objects
-        pr = [[] for i in range(nthreads)]
+        pr = [[] for i in range(ncores)]
         # Lists of the distinct files
-        filelists = [[] for i in range(nthreads)]
-        # unpack all the files into nthreads lists
+        filelists = [[] for i in range(ncores)]
+        # unpack all the files into ncores lists
         for ix, file in enumerate(filenames(files, wavdir, listflag)):
-            filelists[ix % nthreads].append(file)
+            filelists[ix % ncores].append(file)
         # Launch each of the individual processes
-        for i in range(nthreads):
+        for i in range(ncores):
             rx[i], tx[i] = multiprocessing.Pipe(False)
             pr[i] = multiprocessing.Process(target=make_ht_from_list, 
                                             args=(analyzer, filelists[i], ht, tx[i]))
             pr[i].start()
         # gather results when they all finish
-        for i in range(nthreads):
+        for i in range(ncores):
             # thread passes back serialized hash table structure
             htx = rx[i].recv()
             print "ht",i,"has",len(htx.names),"files",sum(htx.counts),"hashes"
@@ -717,43 +738,6 @@ def main(argv):
                 ht.merge(htx)
             # finish that thread...
             pr[i].join()
-
-    elif multiproc:
-        # add tracks with experimental pipeline
-        # This version is no longer run.  It sets up separate processes for 
-        # analyze (wavfile2hashes) and ht.store.  However, it seems like it 
-        # gets blocked in the pipe that transfers between them, because it 
-        # runs slower.  Anyway, the compute time is something like 80% in 
-        # wavfile2hashes, so it would only effect a marginal speedup.
-        import multiprocessing
-        # Setup a separate process to generate hashes
-        #q = multiprocessing.Queue()
-        rx, q = multiprocessing.Pipe(False)
-        p = multiprocessing.Process(target=hash_sender, 
-                                    args=(filenames(files, wavdir, listflag), analyzer, q))
-        p.start()
-        running = True
-        ix = 0
-        tothashes = 0
-        totdur = 0.0
-        while running:
-            #filename, hashes, dur = q.get()
-            filename, hashes, dur = rx.recv()
-            #print "main: got", filename
-            if filename:
-                print time.ctime(), "ingesting #", ix, ":", filename, "(", len(hashes), "hashes) ..."
-                ht.store(filename, hashes)
-                tothashes += len(hashes)
-                totdur += dur
-                ix += 1
-            else:
-                running = False
-        p.join()
-
-        print "Added", tothashes, "hashes", \
-              "(%.1f" % (tothashes/totdur), "hashes/sec)"
-        analyzer.soundfiletotaldur = totdur
-        analyzer.soundfilecount = ix
 
     else:
         # Adding files - command was 'new' or 'add'
