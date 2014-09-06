@@ -663,6 +663,13 @@ def main(argv):
             ht2 = hash_table.HashTable(file)
             ht.merge(ht2)
 
+    elif multiproc and cmd == 'match':
+        # Running queries in parallel
+        import joblib
+        nthreads = 4
+        msgslist = joblib.Parallel(n_jobs=nthreads)(delayed(file_match)(analyzer, ht, file, match_win, min_count, max_matches, sortbytime, illustrate, verbose) for file in filenames(files, wavdir, listflag))
+        print ["\n".join(msgs) for msgs in msgslist]
+
     elif cmd == 'match':
         # Running query
         for file in filenames(files, wavdir, listflag):

@@ -212,7 +212,7 @@ class HashTable:
                 # Need to subselect
                 allvals = np.r_[self.table[hash, :self.counts[hash]], 
                                 ht.table[hash, :ht.counts[hash]]]
-                rp = np.randperm(len(allvals))
+                rp = np.random.permutation(range(len(allvals)))
                 self.table[hash,] = allvals[rp[:depth]]
             self.counts[hash] += ht.counts[hash]
         self.dirty = True
