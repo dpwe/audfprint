@@ -60,8 +60,11 @@ class HashTable:
             id = name
         # Now insert the hashes
         hashmask = (1 << self.hashbits) - 1
+        #mxtime = self.maxtime
+        timemask = self.maxtime - 1
         # Try sorting the pairs by hash value, for better locality in storing
-        sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
+        #sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
+        sortedpairs = timehashpairs
         # Tried making it an np array to permit vectorization, ends up slower...
         #sortedpairs = np.array(sorted(timehashpairs, key=lambda x:x[1]), dtype=int)
         # Keep only the bottom part of the time value
@@ -73,7 +76,8 @@ class HashTable:
             # How many already stored for this hash?
             count = self.counts[hash]
             # Keep only the bottom part of the time value
-            time %= self.maxtime
+            #time %= mxtime
+            time &= timemask
             # Keep only the bottom part of the hash value
             hash &= hashmask
             # Mixin with ID
@@ -190,3 +194,25 @@ class HashTable:
     def totalhashes(self):
         """ Return the total count of hashes stored in the table """
         return np.sum(self.counts)
+
+    def merge(self, ht):
+        """ Merge in the results from another hash table """
+        # All the items go into our table, offset by our current size
+        ncurrent = len(self.names)
+        size = len(self.counts)
+        self.names += ht.names
+        self.hashesperid += ht.hashesperid
+        # All the table values need to be increased by the ncurrent
+        idoffset = self.maxtime * ncurrent
+        for hash in xrange(size):
+            if self.counts[hash] + ht.counts[hash] <= self.depth:
+                self.table[hash, self.counts[hash]:(self.counts[hash]+ht.counts[hash])] \
+                   = ht.table[hash, :ht.counts[hash]] + idoffset
+            else:
+                # Need to subselect
+                allvals = np.r_[self.table[hash, :self.counts[hash]], 
+                                ht.table[hash, :ht.counts[hash]]]
+                rp = np.randperm(len(allvals))
+                self.table[hash,] = allvals[rp[:depth]]
+            self.counts[hash] += ht.counts[hash]
+        self.dirty = True

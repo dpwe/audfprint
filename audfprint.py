@@ -154,31 +154,20 @@ class Analyzer:
         peaks = np.zeros((srows, scols))
         # optimization of mask update
         __sp_pts = len(sthresh)
+        __sp_v = self.__sp_vals
 
         for col in range(scols):
             Scol = S[:, col]
-            sdiff = np.maximum(0, Scol - sthresh)
-            sdmaxposs = np.nonzero(locmax(sdiff))[0]
-            npeaksfound = 0
-            # Work down list of peaks in order of their prominence above threshold 
-            # (compatible with Matlab)
-            #pkvals = Scol[sdmaxposs] - sthresh[sdmaxposs]   # for MATCOMPAT v0.90
-            # Work down list of peaks in order of their absolute value above 
-            # threshold (sensible)
-            pkvals = Scol[sdmaxposs]
-            for val, peakpos in sorted(zip(pkvals, sdmaxposs), reverse=True):
-                if npeaksfound < self.maxpksperframe:
-                    if Scol[peakpos] > sthresh[peakpos]:
-                        #print "frame:", col, " bin:", peakpos, " val:", Scol[peakpos], " thr:", sthresh[peakpos]
-                        npeaksfound += 1
-                        # What we actually want
-                        #sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
-                        #                      base=sthresh, width=f_sd)
-                        # Optimization - inline the core function within spreadpeaks
-                        sthresh = np.maximum(sthresh, Scol[peakpos]*self.__sp_vals[(__sp_pts - peakpos):(2*__sp_pts - peakpos)])
-                        #
-                        peaks[peakpos, col] = 1
-            #thr[:, col] = sthresh
+            # Find local magnitude peaks that are above threshold
+            sdmaxposs = np.nonzero(locmax(Scol) * (Scol>sthresh))[0]
+            # Work down list of peaks in order of their absolute value above threshold
+            valspeaks = sorted(zip(Scol[sdmaxposs], sdmaxposs), reverse=True)
+            for val, peakpos in valspeaks[:self.maxpksperframe]:
+                # What we actually want
+                #sthresh = spreadpeaks([(peakpos, Scol[peakpos])], base=sthresh, width=f_sd)
+                # Optimization - inline the core function within spreadpeaks
+                sthresh = np.maximum(sthresh, val*__sp_v[(__sp_pts - peakpos):(2*__sp_pts - peakpos)])
+                peaks[peakpos, col] = 1
             sthresh *= a_dec
         return peaks
 
@@ -555,7 +544,7 @@ or identify noisy query excerpts with match.
 "Precompute" writes a *.fpt file under fptdir with 
 precomputed fingerprint for each input wav file.
 
-Usage: audfprint (new | add | match | precompute) [-d <dbase> | --dbase <dbase>] [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge) [-d <dbase> | --dbase <dbase>] [options] <file>...
 
 Options:
   -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
@@ -592,6 +581,8 @@ def main(argv):
         cmd = 'add'
     elif args['precompute']:
         cmd = 'precompute'
+    elif args['merge']:
+        cmd = 'merge'
     else:
         cmd = 'match'
     dbasename = args['<dbase>']
@@ -654,7 +645,13 @@ def main(argv):
     # Store in analyzer
     analyzer.shifts = shifts
 
-    if cmd == 'match':
+    if cmd == 'merge':
+        # files are other hash tables, merge them in
+        for file in filenames(files, wavdir, listflag):
+            ht2 = hash_table.HashTable(file)
+            ht.merge(ht2)
+
+    elif cmd == 'match':
         # Running query
         for file in filenames(files, wavdir, listflag):
             msgs = file_match(analyzer, ht, file, match_win, min_count, 
@@ -711,8 +708,9 @@ def main(argv):
 
     elapsedtime = time.clock() - initticks
     totdur = analyzer.soundfiletotaldur
-    print "Processed %d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
-           % (analyzer.soundfilecount, totdur, elapsedtime, (elapsedtime/totdur))
+    if totdur > 0.:
+        print "Processed %d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
+            % (analyzer.soundfilecount, totdur, elapsedtime, (elapsedtime/totdur))
 
     if ht and ht.dirty:
         ht.save(dbasename, {"samplerate":samplerate})
