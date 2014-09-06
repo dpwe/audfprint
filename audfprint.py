@@ -143,6 +143,67 @@ class Analyzer:
             Y = np.maximum(Y, val*self.__sp_vals[np.arange(npoints) + npoints - pos])
         return Y
 
+    def fp_fwd(self, S, a_dec):
+        # forward pass of findpeaks
+        # initial threshold envelope based on peaks in first 10 frames
+        (srows, scols) = np.shape(S)
+        sthresh = self.spreadpeaksinvector(np.max(S[:, :np.minimum(10, scols)], axis=1), 
+                                           self.f_sd)
+        ## Store sthresh at each column, for debug
+        #thr = np.zeros((srows, scols))
+        peaks = np.zeros((srows, scols))
+        # optimization of mask update
+        __sp_pts = len(sthresh)
+
+        for col in range(scols):
+            Scol = S[:, col]
+            sdiff = np.maximum(0, Scol - sthresh)
+            sdmaxposs = np.nonzero(locmax(sdiff))[0]
+            npeaksfound = 0
+            # Work down list of peaks in order of their prominence above threshold 
+            # (compatible with Matlab)
+            #pkvals = Scol[sdmaxposs] - sthresh[sdmaxposs]   # for MATCOMPAT v0.90
+            # Work down list of peaks in order of their absolute value above 
+            # threshold (sensible)
+            pkvals = Scol[sdmaxposs]
+            for val, peakpos in sorted(zip(pkvals, sdmaxposs), reverse=True):
+                if npeaksfound < self.maxpksperframe:
+                    if Scol[peakpos] > sthresh[peakpos]:
+                        #print "frame:", col, " bin:", peakpos, " val:", Scol[peakpos], " thr:", sthresh[peakpos]
+                        npeaksfound += 1
+                        # What we actually want
+                        #sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
+                        #                      base=sthresh, width=f_sd)
+                        # Optimization - inline the core function within spreadpeaks
+                        sthresh = np.maximum(sthresh, Scol[peakpos]*self.__sp_vals[(__sp_pts - peakpos):(2*__sp_pts - peakpos)])
+                        #
+                        peaks[peakpos, col] = 1
+            #thr[:, col] = sthresh
+            sthresh *= a_dec
+        return peaks
+
+    def fp_bwd(self, S, peaks, a_dec):
+        # backwards pass of findpeaks
+        (srows, scols) = np.shape(S)
+        # Backwards filter to prune peaks
+        sthresh = self.spreadpeaksinvector(S[:,-1], self.f_sd)
+        for col in range(scols, 0, -1):
+            pkposs = np.nonzero(peaks[:, col-1])[0]
+            peakvals = S[pkposs, col-1]
+            for val, peakpos in sorted(zip(peakvals, pkposs), reverse=True):
+                if val >= sthresh[peakpos]:
+                    # Setup the threshold
+                    sthresh = self.spreadpeaks([(peakpos, val)], base=sthresh, 
+                                               width=self.f_sd)
+                    # Delete any following peak (threshold should, but be sure)
+                    if col < scols:
+                        peaks[peakpos, col] = 0
+                else:
+                    # delete the peak
+                    peaks[peakpos, col-1] = 0
+            sthresh = a_dec*sthresh
+        return peaks
+
     def find_peaks(self, d, sr):
         """ Find the local peaks in the spectrogram as basis for fingerprints.
             Returns a list of (time_frame, freq_bin) pairs.
@@ -173,61 +234,13 @@ class Analyzer:
         S = np.array([scipy.signal.lfilter([1, -1], 
                                            [1, -(self.hpf_pole)**(1/self.OVERSAMP)], Srow) 
                       for Srow in S])[:-1,]
-        # initial threshold envelope based on peaks in first 10 frames
-        (srows, scols) = np.shape(S)
-        sthresh = self.spreadpeaksinvector(np.max(S[:, :np.minimum(10, scols)], axis=1), 
-                                           self.f_sd)
-        ## Store sthresh at each column, for debug
-        #thr = np.zeros((srows, scols))
-        peaks = np.zeros((srows, scols))
-        # optimization of mask update
-        __sp_pts = len(sthresh)
-        #
-        for col in range(scols):
-            Scol = S[:, col]
-            sdiff = np.maximum(0, Scol - sthresh)
-            sdmaxposs = np.nonzero(locmax(sdiff))[0]
-            npeaksfound = 0
-            # Work down list of peaks in order of their prominence above threshold 
-            # (compatible with Matlab)
-            #pkvals = Scol[sdmaxposs] - sthresh[sdmaxposs]   # for MATCOMPAT v0.90
-            # Work down list of peaks in order of their absolute value above 
-            # threshold (sensible)
-            pkvals = Scol[sdmaxposs]
-            for val, peakpos in sorted(zip(pkvals, sdmaxposs), reverse=True):
-                if npeaksfound < self.maxpksperframe:
-                    if Scol[peakpos] > sthresh[peakpos]:
-                        #print "frame:", col, " bin:", peakpos, " val:", Scol[peakpos], " thr:", sthresh[peakpos]
-                        npeaksfound += 1
-                        # What we actually want
-                        #sthresh = spreadpeaks([(peakpos, Scol[peakpos])], 
-                        #                      base=sthresh, width=f_sd)
-                        # Optimization - inline the core function within spreadpeaks
-                        sthresh = np.maximum(sthresh, Scol[peakpos]*self.__sp_vals[(__sp_pts - peakpos):(2*__sp_pts - peakpos)])
-                        #
-                        peaks[peakpos, col] = 1
-            #thr[:, col] = sthresh
-            sthresh *= a_dec
 
-        # Backwards filter to prune peaks
-        sthresh = self.spreadpeaksinvector(S[:,-1], self.f_sd)
-        for col in range(scols, 0, -1):
-            pkposs = np.nonzero(peaks[:, col-1])[0]
-            peakvals = S[pkposs, col-1]
-            for val, peakpos in sorted(zip(peakvals, pkposs), reverse=True):
-                if val >= sthresh[peakpos]:
-                    # Setup the threshold
-                    sthresh = self.spreadpeaks([(peakpos, val)], base=sthresh, 
-                                               width=self.f_sd)
-                    # Delete any following peak (threshold should, but be sure)
-                    if col < scols:
-                        peaks[peakpos, col] = 0
-                else:
-                    # delete the peak
-                    peaks[peakpos, col-1] = 0
-            sthresh = a_dec*sthresh
+        peaks = self.fp_fwd(S, a_dec)
+
+        peaks = self.fp_bwd(S, peaks, a_dec)
 
         # build a list of peaks
+        (srows, scols) = np.shape(S)
         pklist = [[] for _ in xrange(scols)]
         for col in xrange(scols):
             pklist[col] = np.nonzero(peaks[:,col])[0]
@@ -250,12 +263,12 @@ class Analyzer:
                 for col2 in xrange(col+self.mindt, min(scols, col+self.targetdt)):
                     if (pairsthispeak < self.maxpairsperpeak):
                         for peak2 in pklist[col2]:
-                            if ( (pairsthispeak < self.maxpairsperpeak)
-                                 and abs(peak2-peak) < self.targetdf
-                                 and abs(peak2-peak) + abs(col2-col) > 2  ):
-                                # We have a pair!
-                                landmarks.append( (col, peak, peak2, col2-col) )
-                                pairsthispeak += 1
+                            if abs(peak2-peak) < self.targetdf :
+                                #and abs(peak2-peak) + abs(col2-col) > 2 ):
+                                if (pairsthispeak < self.maxpairsperpeak):
+                                    # We have a pair!
+                                    landmarks.append( (col, peak, peak2, col2-col) )
+                                    pairsthispeak += 1
 
         return landmarks
 
@@ -520,6 +533,19 @@ def file_precompute(analyzer, file, precompdir, precompext):
     hashes_save(opfname, hashes)
     return "wrote " + opfname + " ( %d hashes, %.3f sec)" % (len(hashes), analyzer.soundfiledur)
 
+def hash_sender(filename_generator, analyzer, hqueue):
+    """ function that is run in a separate thread to generate the hashes for a sequence of files and push them onto hqueue """
+    for filename in filename_generator:
+        hashes = analyzer.wavfile2hashes(filename)
+        #print "hash_sender: sending", filename, "and", len(hashes), "hashes"
+        #hqueue.put_nowait( (filename, hashes, analyzer.soundfiledur) )
+        hqueue.send( (filename, hashes, analyzer.soundfiledur) )
+    # Send empty data to indicate end
+    #hqueue.put_nowait( (None, None, 0.0) )  # Keep pushing data into pipe
+    hqueue.send( (None, None, 0.0) )  # Keep pushing data into pipe
+    # Close out
+    #hqueue.close()
+    #hqueue.join_thread()
 
 usage = """
 Audio landmark-based fingerprinting.  
@@ -549,6 +575,7 @@ Options:
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v, --verbose                   Verbose reporting
   -I, --illustrate                Make a plot showing the match
+  -M, --multiproc                 Experimental multi-core support
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
   --version                       Report version number
   --help                          Print this message
@@ -576,6 +603,7 @@ def main(argv):
     listflag = args['--list']
     verbose = args['--verbose']
     illustrate = args['--illustrate']
+    multiproc = args['--multiproc']
     sortbytime = args['--sortbytime']
     files = args['<file>']
     precompdir = args['--precompdir']
@@ -638,6 +666,37 @@ def main(argv):
         for file in filenames(files, wavdir, listflag):
             msgs = file_precompute(analyzer, file, precompdir, precompext)
             print "\n".join(msgs)
+
+    elif multiproc:
+        # add tracks with experimental pipeline
+        import multiprocessing
+        # Setup a separate process to generate hashes
+        #q = multiprocessing.Queue()
+        rx, q = multiprocessing.Pipe(False)
+        p = multiprocessing.Process(target=hash_sender, args=(filenames(files, wavdir, listflag), analyzer, q))
+        p.start()
+        running = True
+        ix = 0
+        tothashes = 0
+        totdur = 0.0
+        while running:
+            #filename, hashes, dur = q.get()
+            filename, hashes, dur = rx.recv()
+            #print "main: got", filename
+            if filename:
+                ht.store(filename, hashes)
+                print time.ctime(), "ingesting #", ix, ":", filename, "..."
+                tothashes += len(hashes)
+                totdur += dur
+                ix += 1
+            else:
+                running = False
+        p.join()
+
+        print "Added", tothashes, "hashes", \
+              "(%.1f" % (tothashes/totdur), "hashes/sec)"
+        analyzer.soundfiletotaldur = totdur
+        analyzer.soundfilecount = ix
 
     else:
         # Adding files - command was 'new' or 'add'
