@@ -45,7 +45,7 @@ defaults = {'density': "100",
 # Parse input file
 import ConfigParser
 config = ConfigParser.ConfigParser(defaults)
-section = 'audfprint'
+section = 'dpwe_builder'
 config.add_section(section)
 
 if config_file:
@@ -54,7 +54,9 @@ if config_file:
 density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')
 ncores = config.getint(section, 'ncores')
-x
+
+print sys.argv[0], "density:", density, "fanout:", fanout, "ncores:", ncores
+
 # Run the command
 argv = ["audfprint", "new", 
         "-d", os.path.join(dir4db, "data.fpdb"), 

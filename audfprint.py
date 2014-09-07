@@ -533,11 +533,15 @@ def file_precompute(analyzer, file, precompdir, precompext):
     hashes_save(opfname, hashes)
     return ["wrote " + opfname + " ( %d hashes, %.3f sec)" % (len(hashes), analyzer.soundfiledur)]
 
-def make_ht_from_list(analyzer, filelist, ht, pipe=None):
+def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     """ Populate a hash table from a list, used as target for multiprocess division.  pipe is a pipe over which to push back the result, else return it """
+    # Create new ht instance
+    ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
+    # Add in the files
     for filename in filelist:
         hashes = analyzer.wavfile2hashes(filename)
         ht.store(filename, hashes)
+    # Pass back to caller
     if pipe:
         pipe.send(ht)
     else:
@@ -733,7 +737,9 @@ def main(argv):
         for i in range(ncores):
             rx[i], tx[i] = multiprocessing.Pipe(False)
             pr[i] = multiprocessing.Process(target=make_ht_from_list, 
-                                            args=(analyzer, filelists[i], ht, tx[i]))
+                                            args=(analyzer, filelists[i], 
+                                                  ht.hashbits, ht.depth, ht.maxtime, 
+                                                  tx[i]))
             pr[i].start()
         # gather results when they all finish
         for i in range(ncores):

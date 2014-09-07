@@ -45,7 +45,6 @@ else:
         dir4db = sys.argv[2]
         resultFile = sys.argv[3]
 
-
 # Default params
 defaults = {'density': "100", 
             'fanout': "5", 
@@ -54,7 +53,8 @@ defaults = {'density': "100",
 # Parse input file
 import ConfigParser
 config = ConfigParser.ConfigParser(defaults)
-section = 'audfprint'
+section = 'dpwe_matcher'
+
 config.add_section(section)
 
 if config_file:
@@ -64,7 +64,7 @@ density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')
 ncores = config.getint(section, 'ncores')
 
-print density, fanout, ncores
+print sys.argv[0], "density:", density, "fanout:", fanout, "ncores:", ncores
 
 # Run the command
 argv = ["audfprint", "match", 

@@ -1,0 +1,9 @@
+[dpwe_builder]
+density: 70
+fanout: 8
+ncores: 4
+
+[dpwe_matcher]
+density: 100
+fanout: 12
+ncores: 4
