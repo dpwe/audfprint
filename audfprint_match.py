@@ -36,7 +36,8 @@ def locmax(x, indices=False):
 def find_modes(data, threshold=5, window=0):
     """ Find multiple modes in data,  Report a list of (mode, count) pairs for every mode greater than or equal to threshold.  Only local maxima in counts are returned. """
     vals = np.unique(data)
-    counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
+    #counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
+    counts = [np.sum(np.abs(data - val) <= window) for val in vals]
     # Put them into an actual vector
     minval = min(vals)
     fullvector = np.zeros(max(vals-minval)+1)
