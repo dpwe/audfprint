@@ -37,7 +37,8 @@ def find_modes(data, threshold=5, window=0):
     """ Find multiple modes in data,  Report a list of (mode, count) pairs for every mode greater than or equal to threshold.  Only local maxima in counts are returned. """
     vals = np.unique(data)
     #counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
-    counts = [np.sum(np.abs(data - val) <= window) for val in vals]
+    #counts = np.array([np.sum(np.abs(data - val) <= window) for val in vals])
+    counts = np.sum(np.abs(np.subtract.outer(vals, data)) <= window, axis=1)
     # Put them into an actual vector
     minval = min(vals)
     fullvector = np.zeros(max(vals-minval)+1)
@@ -53,28 +54,44 @@ def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
         hit (0=top hit).
     """
     # find the implicated id, time pairs from hash table
+    #hits = np.array(ht.get_hits(hashes))
     hits = ht.get_hits(hashes)
-    # Sorted list of all the track ids that got hits
-    idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
-    # Counts of unique entries in the sorted list - diff of locations of changes
-    counts = np.diff(np.nonzero(idlist[:-1] != idlist[1:]))[0]
-    # ids corresponding to each count - just read after the changes in the list
-    ids = idlist[np.cumsum(counts)]
+    ## Sorted list of all the track ids that got hits
+    #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
+    ## Counts of unique entries in the sorted list - diff of locations of changes
+    #counts = np.diff(np.nonzero(idlist[:-1] != idlist[1:]))[0]
+    ## ids corresponding to each count - just read after the changes in the list
+    #ids = idlist[np.cumsum(counts)]
+    # Optimized version avoids so many loops
+    #allids = hits[:,0]
+    allids = np.array([id for id, time, hash, otime in hits])
+    alltimes = np.array([time for id, time, hash, otime in hits])
+    allhashes = np.array([hash for id, time, hash, otime in hits])
+    allotimes = np.array([otime for id, time, hash, otime in hits])
+    maxotime = np.max(allotimes)
+    ids = np.unique(allids)
+    counts = np.sum(np.equal.outer(ids, allids), axis=1)
 
     # Find all the actual hits for a the most popular ids
     bestcountsids = sorted(zip(counts, ids), reverse=True)
     # Try the top 100 results
     results = []
     for rawcount, tid in bestcountsids[:100]:
-        modescounts = find_modes([time for (id, time, hash, otime) in hits 
-                                       if id == tid], 
-                                      window=window, threshold=threshcount)
+        #modescounts = find_modes([time for (id, time, hash, otime) in hits 
+        #                               if id == tid], 
+        #                              window=window, threshold=threshcount)
+        modescounts = find_modes(alltimes[np.nonzero(allids==tid)[0]], 
+                                 window=window, threshold=threshcount)
         for (mode, filtcount) in modescounts:
-            matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
-                           if id == tid and abs(time - mode) <= window]
-            # matchhashes may include repeats because multiple
-            # ref hashes may match a single query hash under window.  Uniqify:
-            matchhashes = sorted(list(set(matchhashes)))
+            #matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
+            #               if id == tid and abs(time - mode) <= window]
+            ## matchhashes may include repeats because multiple
+            ## ref hashes may match a single query hash under window.  Uniqify:
+            #matchhashes = sorted(list(set(matchhashes)))
+            matchix = np.nonzero((allids == tid) & (np.abs(alltimes - mode) <= window))[0]
+            matchhasheshash = np.unique(allotimes[matchix] + maxotime*allhashes[matchix])
+            matchhashes = [(hash % maxotime, hash / maxotime) for hash in matchhasheshash]
+            # much, much faster
             filtcount = len(matchhashes)
             results.append( (tid, filtcount, mode, rawcount, matchhashes) )
 
