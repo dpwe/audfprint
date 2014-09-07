@@ -23,14 +23,39 @@
 import sys, os
 import audfprint
 
-fileList4db = sys.argv[1]
-dir4db = sys.argv[2]
+config_file = None
+if len(sys.argv) < 2:
+    print "Usage:", sys.argv[0], "[-C config.txt] fileList4db dir4db"
+    sys.exit()
 
-# Params
-density = 100
-fanout  = 3
-ncores  = 4
+else:
+    if sys.argv[1] == "-C":
+        config_file = sys.argv[2]
+        fileList4db = sys.argv[3]
+        dir4db = sys.argv[4]
+    else:
+        fileList4db = sys.argv[1]
+        dir4db = sys.argv[2]
 
+# Default params
+defaults = {'density': "100", 
+            'fanout': "5", 
+            'ncores': "4"}
+
+# Parse input file
+import ConfigParser
+config = ConfigParser.ConfigParser(defaults)
+section = 'audfprint'
+config.add_section(section)
+
+if config_file:
+    config.read(config_file)
+
+density = config.getint(section, 'density')
+fanout = config.getint(section, 'fanout')
+ncores = config.getint(section, 'ncores')
+x
+# Run the command
 argv = ["audfprint", "new", 
         "-d", os.path.join(dir4db, "data.fpdb"), 
         "--density", str(density), 
