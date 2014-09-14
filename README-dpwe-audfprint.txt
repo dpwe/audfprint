@@ -4,13 +4,15 @@ README for the dpwe-audfprint submission to MIREX 2014: Audio Fingerprinting
 
 2014-09-14 Dan Ellis dpwe@ee.columbia.edu
 
+
 INTRODUCTION
 
 dpwe-audfprint is an audio fingerprinting system based on audfprint.py [1].  
 It is configured to conform to the specifications for the 2014 MIREX 
 evaluation of audio fingerprinting systems [2].  This document includes 
 instructions on downloading and installing the system, as well as results 
-on the publicly-released development data.
+on the publicly-released GTZAN development data.
+
 
 DOWNLOAD AND INSTALLATION
 
@@ -61,8 +63,8 @@ second part of the line is blank.
 
 ALTERNATE CONFIGURATIONS
 
-dpwe_builder and dpwe_matcher accept an optional configuration file after 
-an initial "-C" option, e.g.
+dpwe_builder.py and dpwe_matcher.py accept an optional configuration file 
+after an initial "-C" option, e.g.
 
   ./dpwe_builder.py -C config.txt ref.list db
   ./dpwe_builder.py -C config.txt queries.list db matches.out
@@ -71,17 +73,21 @@ See config.txt for an example.  You can control density (approximate number of
 landmarks/sec), fanout (number of hashes per landmark), and ncores (number of 
 cores used in multiprocessing) for both dpwe_builder and dpwe_matcher.
 
-The audfprint package includes three example config files:
+The audfprint package includes four example config files:
 
-  config.txt   - specifies density=70 and fanout=8, the defaults
-  config1.txt  - has density=50 and fanout=6, for a smaller, faster, and 
-                 less accurate example
-  config2.txt  - has density=100 and fanout=10, for a larger, slower, and 
-  	         more accurate example
+  config.txt       - specifies density=70 and fanout=8, the defaults
+  config_low.txt   - has density=50 and fanout=6, for a smaller, faster, and 
+                     less accurate example
+  config2_high.txt - has density=100 and fanout=10, for a larger, slower, and 
+  	             more accurate example
+  config2_tiny.txt - has density=20 and fanout=3, corresponding to the 
+                     default settings for audfprint.py, for a very fast/small 
+		     reference database.
+
 
 EXAMPLE PERFORMANCE
 
-On a 12-core Xeon E5-2420 (1.9 GHz) machine, using ncores=4, using the 
+On a 12-core Xeon E5-2420 (1.9 GHz) machine, using ncores=4, for the 
 standard GTZAN set of 1000 30-second clips as reference, and the released 
 set of 1062 queries as queries:
 
@@ -102,7 +108,8 @@ set of 1062 queries as queries:
   total 16712
   -rw-r--r-- 1 dpwe dpwe 17087508 Sep 14 15:39 data.fpdb
 
-(c) Matching takes 5:59.00 to process 1062 of 10 s each, or 3.4% of real time:
+(c) Matching takes 5:59.00 to process 1062 queries of 10 s each, or 3.4% of 
+    real time:
 
   porkpie:~/tmp/mirex/audfprint-master > time ./dpwe_matcher.py queries.list db matches.out
   ./dpwe_matcher.py density: 70 fanout: 8 ncores: 4
@@ -114,14 +121,19 @@ set of 1062 queries as queries:
   porkpie:~/tmp/mirex/audfprint-master > ./comp_file_lines.py matches.out truth.out
   828 correct out of 1062 = 78.0%
 
-The results for all configuration sets are summarized below
+The results for all configuration sets are summarized below:
 
-Config         density  fanout  builder time  dbase size  matcher time  correct
-config_tiny.txt   20      3       
+CONFIG         DENSITY  FANOUT  BUILDER TIME  DBASE SIZE  MATCHER TIME  CORRECT
+config_tiny.txt   20      3       0.80% RT      7.8 kB/m    1.0% RT      60.8%
 config_low.txt    50      6       0.97% RT     22.5 kB/m    2.0% RT      77.7%
 config.txt        70      8       1.07% RT     34.2 kB/m    3.4% RT      78.0%
 config_high.txt  100     10       1.19% RT     52.4 kB/m    7.8% RT      78.2%
 
+All numbers are running in multiprocessor mode (--ncores 4).
 
-[1] https://github.com/dpwe/audfprint
+
+[1] http://github.com/dpwe/audfprint
+    Note: the actual blob used for the results in this file is:
+    https://github.com/dpwe/audfprint/tree/0301a20b02aa8ef381c29f211963aa8ca26cb32b
+
 [2] http://www.music-ir.org/mirex/wiki/2014:Audio_Fingerprinting
