@@ -85,41 +85,42 @@ On a 12-core Xeon E5-2420 (1.9 GHz) machine, using ncores=4, using the
 standard GTZAN set of 1000 30-second clips as reference, and the released 
 set of 1062 queries as queries:
 
-(a) Analysis takes 5:09.46 across 500 min of files, or 1.03% of real time
+(a) Analysis takes 5:22.44 across 500 min of files, or 1.07% of real time
 
   porkpie:~/tmp/mirex/audfprint-master > time ./dpwe_builder.py ref.list db
-  ./dpwe_builder.py density: 100 fanout: 5 ncores: 4
-  ht 0 has 250 files 1091630 hashes
-  ht 1 has 250 files 1098682 hashes
-  ht 2 has 250 files 1101037 hashes
-  ht 3 has 250 files 1097195 hashes
-  Saved fprints for 1000 files ( 4388544 hashes) to db/data.fpdb
-  985.797u 19.617s 5:09.46 324.8% 0+0k 0+33048io 0pf+0w
+  ./dpwe_builder.py density: 70 fanout: 8 ncores: 4
+  ht 0 has 250 files 1114852 hashes
+  ht 1 has 250 files 1114865 hashes
+  ht 2 has 250 files 1120895 hashes
+  ht 3 has 250 files 1112672 hashes
+  Saved fprints for 1000 files ( 4463284 hashes) to db/data.fpdb
+  996.194u 19.521s 5:22.44 315.0% 0+0k 0+33400io 0pf+0w
 
-(b) The database occupies 16.9 MB for 500 min of files, or 33.8 kB per minute:
+(b) The database occupies 16.9 MB for 500 min of files, or 34.2 kB per minute:
 
   porkpie:~/tmp/mirex/audfprint-master > ls -l db/
-  total 16536
-  -rw-r--r-- 1 dpwe dpwe 16905657 Sep 14 10:36 data.fpdb
+  total 16712
+  -rw-r--r-- 1 dpwe dpwe 17087508 Sep 14 15:39 data.fpdb
 
-(c) Matching takes 7:22.56 to process 1062 of 10 s each, or 4.2% of real time:
+(c) Matching takes 5:59.00 to process 1062 of 10 s each, or 3.4% of real time:
 
   porkpie:~/tmp/mirex/audfprint-master > time ./dpwe_matcher.py queries.list db matches.out
-  ./dpwe_matcher.py density: 100 fanout: 5 ncores: 4
-  Read fprints for 1000 files ( 4388544 hashes) from db/data.fpdb
-  1716.323u 39.962s 7:22.56 396.8%        0+0k 0+827720io 0pf+0w
+  ./dpwe_matcher.py density: 70 fanout: 8 ncores: 4
+  Read fprints for 1000 files ( 4463284 hashes) from db/data.fpdb
+  1402.459u 19.917s 5:59.00 396.2%        0+0k 0+827720io 0pf+0w
 
 (d) Accuracy for these settings on this database is 77.4%:
 
-  porkpie:~/tmp/mirex/audfprint-master > python comp_file_lines.py matches.out truth.out
-  822 correct out of 1062 = 77.4%
+  porkpie:~/tmp/mirex/audfprint-master > ./comp_file_lines.py matches.out truth.out
+  828 correct out of 1062 = 78.0%
 
 The results for all configuration sets are summarized below
 
 Config         density  fanout  builder time  dbase size  matcher time  correct
+config_tiny.txt   20      3       
+config_low.txt    50      6       0.97% RT     22.5 kB/m    2.0% RT      77.7%
 config.txt        70      8       1.07% RT     34.2 kB/m    3.4% RT      78.0%
-config_low.txt    50      6
-config_high.txt  100     10
+config_high.txt  100     10       1.19% RT     52.4 kB/m    7.8% RT      78.2%
 
 
 [1] https://github.com/dpwe/audfprint
