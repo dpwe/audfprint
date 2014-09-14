@@ -79,10 +79,10 @@ The audfprint package includes four example config files:
   config_low.txt   - has density=50 and fanout=6, for a smaller, faster, and 
                      less accurate example
   config2_high.txt - has density=100 and fanout=10, for a larger, slower, and 
-  	             more accurate example
+                     more accurate example
   config2_tiny.txt - has density=20 and fanout=3, corresponding to the 
                      default settings for audfprint.py, for a very fast/small 
-		     reference database.
+                     reference database.
 
 
 EXAMPLE PERFORMANCE
