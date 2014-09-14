@@ -1,0 +1,14 @@
+# config_low.txt
+# Low-density (high-speed) settings of audfprint 
+# for MIREX 2014 Audio Fingerprinting
+# 2014-09-14 Dan Ellis dpwe@ee.columbia.edu
+
+[dpwe_builder]
+density: 50
+fanout: 6
+ncores: 4
+
+[dpwe_matcher]
+density: 50
+fanout: 6
+ncores: 4

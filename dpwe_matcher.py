@@ -46,8 +46,8 @@ else:
         resultFile = sys.argv[3]
 
 # Default params
-defaults = {'density': "100", 
-            'fanout': "5", 
+defaults = {'density': "70", 
+            'fanout': "8", 
             'ncores': "4"}
 
 # Parse input file

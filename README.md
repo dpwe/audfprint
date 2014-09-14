@@ -6,23 +6,41 @@ Audio landmark-based fingerprinting.
 ```
 Create a new fingerprint dbase with new, 
 append new files to an existing database with add, 
+merge fingerprint databases into another with merge, 
+precompute per-file fingerprints with precompute, 
 or identify noisy query excerpts with match.
 
-Usage: audfprint (new | add | match) (-d <dbase> | --dbase <dbase>) [options] <file>...
+Usage: audfprint (new | add | merge | precompute | match) [-d <dbase> | --dbase <dbase>] [options] <file>...
 
 Options:
   -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
+  -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
+  -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
+  -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
+  -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
+  -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
+  -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
+  -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
+  -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
+  -H <val>, --ncores <val>        Number of processes to spawn in --multiproc mode [default: 4]
+  -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -l, --list                      Input files are lists, not audio
+  -T, --sortbytime                Sort multiple hits per file by time (instead of score)
+  -v <val>, --verbose <val>       Verbosity level [default: 1]
+  -I, --illustrate                Make a plot showing the match
+  -M, --multiproc                 Experimental multi-core support
+  -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
   --version                       Report version number
   --help                          Print this message
 ```
 
-Uses librosa, get https://github.com/bmcfee/librosa
+Uses librosa, get https://github.com/bmcfee/librosa or "pip install librosa"
 
-Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt
+Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt or "pip install docopt"
 
 Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/ .  This python code will actually read and use databases created by the Matlab code (version 0.90 upwards).
 
@@ -32,34 +50,38 @@ Usage
 Build a database of fingerprints from a set of reference audio files:
 ```
 > python audfprint.py new --dbase fpdbase.pklz Nine_Lives/0*.mp3
-Sun Jun  1 09:18:50 2014 ingesting # 0 : Nine_Lives/01-Nine_Lives.mp3  ...
-Sun Jun  1 09:18:53 2014 ingesting # 1 : Nine_Lives/02-Falling_In_Love.mp3  ...
-Sun Jun  1 09:18:55 2014 ingesting # 2 : Nine_Lives/03-Hole_In_My_Soul.mp3  ...
-Sun Jun  1 09:18:58 2014 ingesting # 3 : Nine_Lives/04-Taste_Of_India.mp3  ...
-Sun Jun  1 09:19:01 2014 ingesting # 4 : Nine_Lives/05-Full_Circle.mp3  ...
-Sun Jun  1 09:19:04 2014 ingesting # 5 : Nine_Lives/06-Something_s_Gotta_Give.mp3  ...
-Sun Jun  1 09:19:06 2014 ingesting # 6 : Nine_Lives/07-Ain_t_That_A_Bitch.mp3  ...
-Sun Jun  1 09:19:09 2014 ingesting # 7 : Nine_Lives/08-The_Farm.mp3  ...
-Sun Jun  1 09:19:11 2014 ingesting # 8 : Nine_Lives/09-Crash.mp3  ...
-Added 65044 hashes (25.5 hashes/sec) at 0.009 x RT
-Saved fprints for 9 files ( 65044 hashes) to fpdbase.pklz
+Wed Sep 10 10:52:18 2014 ingesting #0:Nine_Lives/01-Nine_Lives.mp3 ...
+Wed Sep 10 10:52:20 2014 ingesting #1:Nine_Lives/02-Falling_In_Love.mp3 ...
+Wed Sep 10 10:52:22 2014 ingesting #2:Nine_Lives/03-Hole_In_My_Soul.mp3 ...
+Wed Sep 10 10:52:25 2014 ingesting #3:Nine_Lives/04-Taste_Of_India.mp3 ...
+Wed Sep 10 10:52:28 2014 ingesting #4:Nine_Lives/05-Full_Circle.mp3 ...
+Wed Sep 10 10:52:31 2014 ingesting #5:Nine_Lives/06-Something_s_Gotta_Give.mp3 ...
+Wed Sep 10 10:52:32 2014 ingesting #6:Nine_Lives/07-Ain_t_That_A_Bitch.mp3 ...
+Wed Sep 10 10:52:35 2014 ingesting #7:Nine_Lives/08-The_Farm.mp3 ...
+Wed Sep 10 10:52:37 2014 ingesting #8:Nine_Lives/09-Crash.mp3 ...
+Added 63241 hashes (24.8 hashes/sec)
+Processed 9 files (2547.3 s total dur) in 21.6 s sec = 0.008 x RT
+Saved fprints for 9 files ( 63241 hashes) to fpdbase.pklz
 ```
 Add more reference tracks to an existing database:
 ```
 > python audfprint.py add --dbase fpdbase.pklz Nine_Lives/1*.mp3
-Read fprints for 9 files ( 65044 hashes) from fpdbase.pklz
-Sun Jun  1 09:19:30 2014 ingesting # 0 : Nine_Lives/10-Kiss_Your_Past_Good-bye.mp3  ...
-Sun Jun  1 09:19:32 2014 ingesting # 1 : Nine_Lives/11-Pink.mp3  ...
-Sun Jun  1 09:19:35 2014 ingesting # 2 : Nine_Lives/12-Attitude_Adjustment.mp3  ...
-Sun Jun  1 09:19:37 2014 ingesting # 3 : Nine_Lives/13-Fallen_Angels.mp3  ...
-Added 28104 hashes (22.9 hashes/sec) at 0.009 x RT
-Saved fprints for 13 files ( 93148 hashes) to fpdbase.pklz
+Read fprints for 9 files ( 63241 hashes) from fpdbase.pklz
+Wed Sep 10 10:53:14 2014 ingesting #0:Nine_Lives/10-Kiss_Your_Past_Good-bye.mp3 ...
+Wed Sep 10 10:53:16 2014 ingesting #1:Nine_Lives/11-Pink.mp3 ...
+Wed Sep 10 10:53:18 2014 ingesting #2:Nine_Lives/12-Attitude_Adjustment.mp3 ...
+Wed Sep 10 10:53:20 2014 ingesting #3:Nine_Lives/13-Fallen_Angels.mp3 ...
+Added 27067 hashes (22.0 hashes/sec)
+Processed 4 files (1228.6 s total dur) in 13.0 s sec = 0.011 x RT
+Saved fprints for 13 files ( 90308 hashes) to fpdbase.pklz
 ```
 Match a fragment recorded of music playing in the background against the database:
 ```
 > python audfprint.py match --dbase fpdbase.pklz query.mp3
-Read fprints for 13 files ( 93148 hashes) from fpdbase.pklz
-Matched query.mp3 as Nine_Lives/05-Full_Circle.mp3 at 50.085 s with 14 of 17 hashes
+Read fprints for 13 files ( 90308 hashes) from fpdbase.pklz
+Analyzed query.mp3 of 5.573 s to 204 hashes
+Matched query.mp3 5.573 sec 204 raw hashes as Nine_Lives/05-Full_Circle.mp3 at 50.085 s with 8 of 9 hashes
+Processed 1 files (5.8 s total dur) in 2.6 s sec = 0.443 x RT
 ```
 The query contained audio from `Nine_Lives/05-Full_Circle.mp3` starting at 50.085 sec into the track.  There were a total of 17 landmark hashes shared between the query and that track, and 14 of them had a consistent time offset.  Generally, anything more than 5 or 6 consistently-timed matching hashes indicate a true match, and random chance will result in fewer than 1% of the raw common hashes being temporally consistent.
 
