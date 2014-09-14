@@ -572,13 +572,12 @@ Options:
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
-  -H <val>, --ncores <val>        Number of processes to spawn in --multiproc mode [default: 4]
+  -H <val>, --ncores <val>        Number of processes to use [default: 1]
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
   -I, --illustrate                Make a plot showing the match
-  -M, --multiproc                 Experimental multi-core support
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
   --version                       Report version number
   --help                          Print this message
@@ -608,7 +607,6 @@ def main(argv):
     listflag = args['--list']
     verbose = int(args['--verbose'])
     illustrate = args['--illustrate']
-    multiproc = args['--multiproc']
     sortbytime = args['--sortbytime']
     files = args['<file>']
     precompdir = args['--precompdir']
@@ -631,6 +629,8 @@ def main(argv):
         report = lambda list: [print(msg) for msg in list]
 
     # Setup multiprocessing
+    # Don't need a separate multiproc flag, just use ncores
+    multiproc = (ncores > 1)
     if multiproc:
         import multiprocessing  # for new/add
         import joblib           # for match

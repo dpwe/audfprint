@@ -62,7 +62,6 @@ argv = ["audfprint", "new",
         "-d", os.path.join(dir4db, "data.fpdb"), 
         "--density", str(density), 
         "--fanout", str(fanout),
-        "--multiproc", 
         "--ncores", str(ncores), 
         "--list", fileList4db]
 
