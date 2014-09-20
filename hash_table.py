@@ -13,6 +13,11 @@ import cPickle as pickle
 import os, gzip
 import scipy.io
 
+# Current format version
+HT_VERSION = 20140525
+# Earliest acceptable version
+HT_COMPAT_VERSION = 20140525
+
 class HashTable:
     """
     Simple hash table for storing and retrieving fingerprint hashes.
@@ -22,10 +27,6 @@ class HashTable:
        >>> ht.store('identifier', list_of_landmark_time_hash_pairs)
        >>> list_of_ids_tracks = ht.get_hits(hash)
     """
-    # Current format version
-    HT_VERSION = 20140525
-    # Earliest acceptable version
-    HT_COMPAT_VERSION = 20140525
 
     def __init__(self, filename=None, hashbits=20, depth=100, maxtime=16384):
         """ allocate an empty hash table of the specified size """
@@ -44,6 +45,8 @@ class HashTable:
             self.names = []
             # track number of hashes stored per id
             self.hashesperid = []
+            # Empty params
+            self.params = {}
             # Mark as unsaved
             self.dirty = True
 
@@ -102,19 +105,22 @@ class HashTable:
     def get_entry(self, hash):
         """ Return the list of (id, time) entries associate with the given hash"""
         return [ ( int(val / self.maxtime), int(val % self.maxtime) )
-                 for val 
+                 for val
                    in self.table[hash, :min(self.depth, self.counts[hash])] ]
 
     def get_hits(self, hashes):
-        """ Return a list of (id, delta_time, hash, time) tuples 
+        """ Return a list of (id, delta_time, hash, time) tuples
             associated with each element in hashes list of (time, hash) """
         return [ (id, rtime-time, hash, time) for time, hash in hashes
                                           for id, rtime in self.get_entry(hash)]
 
-    def save(self, name, params=[]):
+    def save(self, name, params={}):
         """ Save hash table to file <name>, including optional addition params """
-        self.params = params
-        self.version = self.HT_VERSION
+        # Merge in any provided params
+        for key in params:
+            self.params[key] = params[key]
+        # Record the current version
+        self.version = HT_VERSION
         with gzip.open(name, 'wb') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
@@ -138,7 +144,7 @@ class HashTable:
         """ Read hash table values from file <name>, return params """
         with gzip.open(name, 'rb') as f:
             temp = pickle.load(f)
-        assert(temp.version >= self.HT_COMPAT_VERSION)
+        assert(temp.version >= HT_COMPAT_VERSION)
         params = temp.params
         self.hashbits = temp.hashbits
         self.depth = temp.depth
@@ -179,11 +185,11 @@ class HashTable:
         assert(params['nojenkins'])
         self.table = mht['HashTable'].T
         self.counts = mht['HashTableCounts'][0]
-        self.names = [str(val[0]) if len(val) > 0 else [] 
+        self.names = [str(val[0]) if len(val) > 0 else []
                       for val in mht['HashTableNames'][0]]
         self.hashesperid = mht['HashTableLengths'][0]
-        # Matlab uses 1-origin for the IDs in the hashes, so rather than 
-        # rewrite them all, we shift the corresponding decode tables 
+        # Matlab uses 1-origin for the IDs in the hashes, so rather than
+        # rewrite them all, we shift the corresponding decode tables
         # down one cell
         self.names.insert(0,'')
         self.hashesperid = np.r_[[0], self.hashesperid]
@@ -210,7 +216,7 @@ class HashTable:
                    = ht.table[hash, :ht.counts[hash]] + idoffset
             else:
                 # Need to subselect
-                allvals = np.r_[self.table[hash, :self.counts[hash]], 
+                allvals = np.r_[self.table[hash, :self.counts[hash]],
                                 ht.table[hash, :ht.counts[hash]]]
                 rp = np.random.permutation(range(len(allvals)))
                 self.table[hash,] = allvals[rp[:self.depth]]

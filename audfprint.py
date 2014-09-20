@@ -54,76 +54,95 @@ def locmax(vec, indices=False):
     else:
         return maxmask
 
+# Constants for Analyzer
+# DENSITY controls the density of landmarks found (approx DENSITY per sec)
+DENSITY = 20.0
+# OVERSAMP > 1 tries to generate extra landmarks by decaying faster
+OVERSAMP = 1
+## 512 pt FFT @ 11025 Hz, 50% hop
+#t_win = 0.0464
+#t_hop = 0.0232
+# Just specify n_fft
+N_FFT = 512
+N_HOP = 256
+# spectrogram enhancement
+HPF_POLE = 0.98
+
+# Globals defining packing of landmarks into hashes
+F1_BITS = 8
+DF_BITS = 6
+DT_BITS = 6
+# derived constants
+B1_MASK = (1 << F1_BITS) - 1
+B1_SHIFT = DF_BITS + DT_BITS
+DF_MASK = (1 << DF_BITS) - 1
+DF_SHIFT = DT_BITS
+DT_MASK = (1 << DT_BITS) - 1
+
+def landmarks2hashes(landmarks):
+    """Convert a list of (time, bin1, bin2, dtime) landmarks
+    into a list of (time, hash) pairs where the hash combines
+    the three remaining values.
+    """
+    # build up and return the list of hashed values
+    return [(time_,
+             (((bin1 & B1_MASK) << B1_SHIFT)
+              | (((bin2 - bin1) & DF_MASK) << DF_SHIFT)
+              | (dtime & DT_MASK)))
+            for time_, bin1, bin2, dtime in landmarks]
+
+def hashes2landmarks(hashes):
+    """Convert the mashed-up landmarks in hashes back into a list
+    of (time, bin1, bin2, dtime) tuples.
+    """
+    landmarks = []
+    for time_, hash_ in hashes:
+        dtime = hash_ & DT_MASK
+        bin1 = (hash_ >> B1_SHIFT) & B1_MASK
+        dbin = (hash_ >> DF_SHIFT) & DF_MASK
+        # Sign extend frequency difference
+        if dbin > (1 << (DF_BITS-1)):
+            dbin -= (1 << DF_BITS)
+        landmarks.append((time_, bin1, bin1+dbin, dtime))
+    return landmarks
+
+
 class Analyzer(object):
     """ A class to wrap up all the parameters associated with
         the analysis of soundfiles into fingerprints """
     # Parameters
-    # DENSITY controls the density of landmarks found (approx DENSITY per sec)
-    DENSITY = 20.0
-    # OVERSAMP > 1 tries to generate extra landmarks by decaying faster
-    OVERSAMP = 1
-    ## 512 pt FFT @ 11025 Hz, 50% hop
-    #t_win = 0.0464
-    #t_hop = 0.0232
-    # Just specify n_fft
-    N_FFT = 512
-    N_HOP = 256
-
-    density = None
-    n_fft = None
-    n_hop = None
-    # spectrogram enhancement
-    hpf_pole = 0.98
-
-    # How many offsets to provide in analysis
-    shifts = 1
-
-    # how wide to spreak peaks
-    f_sd = None
-    # Maximum number of local maxima to keep per frame
-    maxpksperframe = None
-    # Fanout
-    maxpairsperpeak = None  # Limit the num of pairs we'll make from each peak
-
-    # Values controlling peaks2landmarks
-    targetdf = 31   # +/- 50 bins in freq (LIMITED TO -32..31 IN LANDMARK2HASH)
-    mindt = 2       # min time separation (traditionally 1, upped 2014-08-04)
-    targetdt = 63   # max lookahead in time (LIMITED TO <64 IN LANDMARK2HASH)
 
     # optimization: cache pre-calculated Gaussian profile
     __sp_width = None
     __sp_len = None
     __sp_vals = []
 
-    # Globals defining packing of landmarks into hashes
-    F1bits = 8
-    DFbits = 6
-    DTbits = 6
-
-    b1mask = (1 << F1bits) - 1
-    b1shift = DFbits + DTbits
-    dfmask = (1 << DFbits) - 1
-    dfshift = DTbits
-    dtmask = (1 << DTbits) - 1
-
-    # global stores duration of most recently-read soundfile
-    soundfiledur = 0.0
-    # .. and total amount of sound processed
-    soundfiletotaldur = 0.0
-    # .. and count of files
-    soundfilecount = 0
-
-    def __init__(self, f_sd=30.0, maxpksperframe=5, maxpairsperpeak=3,
-                 density=DENSITY, target_sr=11025, n_fft=N_FFT, n_hop=N_HOP,
-                 shifts=1):
-        self.f_sd = f_sd
-        self.maxpksperframe = maxpksperframe
-        self.maxpairsperpeak = maxpairsperpeak
+    def __init__(self, density=DENSITY):
         self.density = density
-        self.target_sr = target_sr
-        self.n_fft = n_fft
-        self.n_hop = n_hop
-        self.shifts = shifts
+        self.target_sr = 11025
+        self.n_fft = N_FFT
+        self.n_hop = N_HOP
+        self.shifts = 1
+        # how wide to spreak peaks
+        self.f_sd = 30.0
+        # Maximum number of local maxima to keep per frame
+        self.maxpksperframe = 5
+        # Limit the num of pairs we'll make from each peak (Fanout)
+        self.maxpairsperpeak = 3
+        # Values controlling peaks2landmarks
+        # +/- 31 bins in freq (LIMITED TO -32..31 IN LANDMARK2HASH)
+        self.targetdf = 31
+        # min time separation (traditionally 1, upped 2014-08-04)
+        self.mindt = 2
+        # max lookahead in time (LIMITED TO <64 IN LANDMARK2HASH)
+        self.targetdt = 63
+        # global stores duration of most recently-read soundfile
+        self.soundfiledur = 0.0
+        # .. and total amount of sound processed
+        self.soundfiletotaldur = 0.0
+        # .. and count of files
+        self.soundfilecount = 0
+
 
     def spreadpeaksinvector(self, vector, width=4.0):
         """ Create a blurred version of vector, where each of the local maxes
@@ -247,7 +266,7 @@ class Analyzer(object):
         """
         # masking envelope decay constant
         a_dec = (1.0 - 0.01*(self.density*np.sqrt(self.n_hop/352.8)/35.0)) \
-                **(1.0/self.OVERSAMP)
+                **(1.0/OVERSAMP)
         # Take spectrogram
         mywin = np.hanning(self.n_fft+2)[1:-1]
         sgram = np.abs(librosa.stft(d, n_fft=self.n_fft,
@@ -258,8 +277,8 @@ class Analyzer(object):
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
         sgram = np.array([scipy.signal.lfilter([1, -1],
-                                               [1, -(self.hpf_pole)** \
-                                                (1/self.OVERSAMP)], s_row)
+                                               [1, -(HPF_POLE)** \
+                                                (1/OVERSAMP)], s_row)
                           for s_row in sgram])[:-1,]
 
         peaks = self._fp_fwd(sgram, a_dec)
@@ -301,34 +320,6 @@ class Analyzer(object):
 
         return landmarks
 
-
-    def landmarks2hashes(self, landmarks):
-        """ Convert a list of (time, bin1, bin2, dtime) landmarks
-            into a list of (time, hash) pairs where the hash combines
-            the three remaining values.
-        """
-        # build up and return the list of hashed values
-        return [(time_,
-                 (((bin1 & self.b1mask) << self.b1shift)
-                  | (((bin2 - bin1) & self.dfmask) << self.dfshift)
-                  | (dtime & self.dtmask)))
-                for time_, bin1, bin2, dtime in landmarks]
-
-    def hashes2landmarks(self, hashes):
-        """ Convert the mashed-up landmarks in hashes back into a list
-            of (time, bin1, bin2, dtime) tuples.
-        """
-        landmarks = []
-        for time_, hash_ in hashes:
-            dtime = hash_ & self.dtmask
-            bin1 = (hash_ >> self.b1shift) & self.b1mask
-            dbin = (hash_ >> self.dfshift) & self.dfmask
-            # Sign extend frequency difference
-            if dbin > (1 << (self.DFbits-1)):
-                dbin -= (1 << self.DFbits)
-            landmarks.append((time_, bin1, bin1+dbin, dtime))
-        return landmarks
-
     def wavfile2hashes(self, filename):
         """ Read a soundfile and return its fingerprint hashes as a
             list of (time, hash) pairs.  If specified, resample to sr first.
@@ -338,19 +329,16 @@ class Analyzer(object):
         if ext == PRECOMPEXT:
             # short-circuit - precomputed fingerprint file
             hashes = hashes_load(filename)
+            dur = np.max(hashes, axis=0)[0]*self.n_hop/float(self.target_sr)
         else:
             [d, sr] = librosa.load(filename, sr=self.target_sr)
             # Store duration in a global because it's hard to handle
             dur = float(len(d))/sr
-            self.soundfiledur = dur
-            # instrumentation to track total amount of sound processed
-            self.soundfiletotaldur += dur
-            self.soundfilecount += 1
             # Calculate hashes with optional part-frame shifts
             query_hashes = []
             for shift in range(self.shifts):
                 shiftsamps = int(float(shift)/self.shifts*self.n_hop)
-                query_hashes += self.landmarks2hashes(
+                query_hashes += landmarks2hashes(
                     self.peaks2landmarks(
                         self.find_peaks(d[shiftsamps:],
                                         sr)
@@ -359,6 +347,10 @@ class Analyzer(object):
             # remove duplicate elements by pushing through a set
             hashes = sorted(list(set(query_hashes)))
 
+        # instrumentation to track total amount of sound processed
+        self.soundfiledur = dur
+        self.soundfiletotaldur += dur
+        self.soundfilecount += 1
         #print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
 
@@ -519,48 +511,6 @@ def ensure_dir(fname):
 
 # basic operations, each in a separate function
 
-def file_match(analyzer, ht, qry, match_win, min_count, max_matches,
-               sortbytime, illustrate, verbose):
-    """ Perform a match on a single input file, return list
-        of message strings """
-    rslts, dur, nhash = audfprint_match.match_file(analyzer, ht, qry,
-                                                   window=match_win,
-                                                   threshcount=min_count,
-                                                   verbose=verbose)
-    t_hop = analyzer.n_hop/float(analyzer.target_sr)
-    if verbose:
-        qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
-    else:
-        qrymsg = qry
-
-    msgrslt = []
-    if len(rslts) == 0:
-        # No matches returned at all
-        nhashaligned = 0
-        if verbose:
-            msgrslt.append("NOMATCH "+qrymsg)
-        else:
-            msgrslt.append(qrymsg+"\t")
-    else:
-        if sortbytime:
-            rslts = sorted(rslts, key=lambda x: -x[2])
-        for hitix in range(min(len(rslts), max_matches)):
-            # figure the number of raw and aligned matches for top hit
-            tophitid, nhashaligned, bestaligntime, nhashraw = rslts[hitix]
-            if verbose:
-                msgrslt.append("Matched " + qrymsg + " as "
-                               + ht.names[tophitid] \
-                               + (" at %.3f " % (bestaligntime*t_hop)) + "s " \
-                               + "with " + str(nhashaligned) \
-                               + " of " + str(nhashraw) + " hashes")
-            else:
-                msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
-            if illustrate:
-                audfprint_match.illustrate_match(analyzer, ht, qry,
-                                                 window=match_win,
-                                                 sortbytime=sortbytime)
-    return msgrslt
-
 def file_precompute(analyzer, filename, precompdir, precompext=PRECOMPEXT):
     """ Perform precompute action for one file, return list
         of message strings """
@@ -578,10 +528,14 @@ def file_precompute(analyzer, filename, precompdir, precompext=PRECOMPEXT):
     return ["wrote " + opfname + " ( %d hashes, %.3f sec)" \
                                    % (len(hashes), analyzer.soundfiledur)]
 
-def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
+def make_ht_from_list(analyzer, filelist, proto_hash_tab, pipe=None):
     """ Populate a hash table from a list, used as target for
         multiprocess division.  pipe is a pipe over which to push back
         the result, else return it """
+    # Clone HT params
+    hashbits = proto_hash_tab.hashbits
+    depth = proto_hash_tab.depth
+    maxtime = proto_hash_tab.maxtime
     # Create new ht instance
     ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
     # Add in the files
@@ -594,6 +548,174 @@ def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     else:
         return ht
 
+def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, report):
+    """ Breaks out the core part of running the command.
+        This is just the single-core versions.
+    """
+    if cmd == 'merge':
+        # files are other hash tables, merge them in
+        for filename in filename_iter:
+            hash_tab2 = hash_table.HashTable(filename)
+            hash_tab.merge(hash_tab2)
+
+    elif cmd == 'precompute':
+        # just precompute fingerprints, single core
+        for filename in filename_iter:
+            report(file_precompute(analyzer, filename,
+                                   outdir, PRECOMPEXT))
+
+    elif cmd == 'match':
+        # Running query, single-core mode
+        for filename in filename_iter:
+            msgs = matcher.file_match_to_msgs(analyzer, hash_tab, filename)
+            report(msgs)
+
+    elif cmd == 'new' or cmd == 'add':
+        # Adding files
+        tothashes = 0
+        ix = 0
+        for filename in filename_iter:
+            report([time.ctime() + " ingesting #" + str(ix) + ": "
+                    + filename + " ..."])
+            dur, nhash = analyzer.ingest(hash_tab, filename)
+            tothashes += nhash
+            ix += 1
+
+        report(["Added " +  str(tothashes) + " hashes "
+                + "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur))
+                + " hashes/sec)"])
+    else:
+        raise ValueError("unrecognized command: "+cmd)
+
+def multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
+    """Run multiple threads adding new files to hash table"""
+    # run ncores in parallel to add new files to existing HASH_TABLE
+    # lists store per-process parameters
+    # Pipes to transfer results
+    rx = [[] for _ in range(ncores)]
+    tx = [[] for _ in range(ncores)]
+    # Process objects
+    pr = [[] for _ in range(ncores)]
+    # Lists of the distinct files
+    filelists = [[] for _ in range(ncores)]
+    # unpack all the files into ncores lists
+    ix = 0
+    for filename in filename_iter:
+        filelists[ix % ncores].append(filename)
+        ix += 1
+    # Launch each of the individual processes
+    for ix in range(ncores):
+        rx[ix], tx[ix] = multiprocessing.Pipe(False)
+        pr[ix] = multiprocessing.Process(target=make_ht_from_list,
+                                         args=(analyzer, filelists[ix],
+                                               hash_tab, tx[ix]))
+        pr[ix].start()
+    # gather results when they all finish
+    for core in range(ncores):
+        # thread passes back serialized hash table structure
+        hash_tabx = rx[core].recv()
+        report(["hash_table " + str(core) + " has "
+                + str(len(hash_tabx.names))
+                + " files " + str(sum(hash_tabx.counts)) + " hashes"])
+        if len(hash_tab.counts) == 0:
+            # Avoid merge into empty hash table, just keep the first one
+            hash_tab = hash_tabx
+        else:
+            # merge in all the new items, hash entries
+            hash_tab.merge(hash_tabx)
+        # finish that thread...
+        pr[core].join()
+
+
+def matcher_file_match_to_msgs(matcher, analyzer, hash_tab, filename):
+    """Cover for matcher.file_match_to_msgs so it can be passed to joblib"""
+    return matcher.file_match_to_msgs(analyzer, hash_tab, filename)
+
+def do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter, matcher,
+                     outdir, report, ncores):
+    """ Run the actual command, using multiple processors """
+    if cmd == 'precompute':
+        # precompute fingerprints with joblib
+        msgslist = joblib.Parallel(n_jobs=ncores)(
+            joblib.delayed(file_precompute)(analyzer, file, outdir,
+                                            PRECOMPEXT)
+            for file in filename_iter
+        )
+        # Collapse into a single list of messages
+        for msgs in msgslist:
+            report(msgs)
+
+    elif cmd == 'match':
+        # Running queries in parallel
+        msgslist = joblib.Parallel(n_jobs=ncores)(
+            # Would use matcher.file_match_to_msgs(), but you
+            # can't use joblib on an instance method
+            joblib.delayed(matcher_file_match_to_msgs)(matcher, analyzer,
+                                                       hash_tab, filename)
+            for filename in filename_iter
+        )
+        for msgs in msgslist:
+            report(msgs)
+
+    elif cmd == 'new' or cmd == 'add':
+        # We add by forking multiple parallel threads each running
+        # analyzers over different subsets of the file list
+        multiproc_add(analyzer, hash_tab, filename_iter, report, ncores)
+
+    else:
+        # This is not a multiproc command
+        raise ValueError("unrecognized multiproc command: "+cmd)
+
+# Command to separate out setting of analyzer parameters
+def setup_analyzer(args):
+    """Create a new analyzer object, taking values from docopts args"""
+    # Create analyzer object; parameters will get set below
+    analyzer = Analyzer()
+    # Read parameters from command line/docopts
+    analyzer.density = float(args['--density'])
+    analyzer.maxpksperframe = int(args['--pks-per-frame'])
+    analyzer.maxpairsperpeak = int(args['--fanout'])
+    analyzer.f_sd = float(args['--freq-sd'])
+    analyzer.shifts = int(args['--shifts'])
+    # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
+    analyzer.target_sr = int(args['--samplerate'])
+    analyzer.n_fft = 512
+    analyzer.n_hop = analyzer.n_fft/2
+    # set default value for shifts depending on mode
+    if analyzer.shifts == 0:
+        # Default shift is 4 for match, otherwise 1
+        analyzer.shifts = 4 if args['match'] else 1
+    return analyzer
+
+# Command to separate out setting of matcher parameters
+def setup_matcher(args):
+    """Create a new matcher objects, set parameters from docopt structure"""
+    matcher = audfprint_match.Matcher()
+    matcher.window = int(args['--match-win'])
+    matcher.threshold = int(args['--min-count'])
+    matcher.max_returns = int(args['--max-matches'])
+    matcher.sort_by_time = args['--sortbytime']
+    matcher.illustrate = args['--illustrate']
+    matcher.verbose = args['--verbose']
+    return matcher
+
+# Command to construct the reporter object
+def setup_reporter(args):
+    """ Creates a logging function, either to stderr or file"""
+    opfile = args['--opfile']
+    if opfile and len(opfile):
+        f = open(opfile, "w")
+        def report(msglist):
+            """Log messages to a particular output file"""
+            for msg in msglist:
+                f.write(msg+"\n")
+    else:
+        def report(msglist):
+            """Log messages by printing to stdout"""
+            for msg in msglist:
+                print(msg)
+    return report
+
 # CLI specified via usage message thanks to docopt
 USAGE = """
 Audio landmark-based fingerprinting.
@@ -603,9 +725,10 @@ or identify noisy query excerpts with match.
 "Precompute" writes a *.fpt file under fptdir with
 precomputed fingerprint for each input wav file.
 
-Usage: audfprint (new | add | match | precompute | merge) [-d <dbase> | --dbase <dbase>] [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge) [options] <file>...
 
 Options:
+  -d <dbase>, --dbase <dbase>     Fingerprint database file
   -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
@@ -613,7 +736,7 @@ Options:
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
-  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 1]
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
@@ -636,200 +759,84 @@ def main(argv):
     """ Main routine for the command-line interface to audfprint """
     # Other globals set from command line
     args = docopt.docopt(USAGE, version=__version__, argv=argv[1:])
-    if args['new']:
-        cmd = 'new'
-    elif args['add']:
-        cmd = 'add'
-    elif args['precompute']:
-        cmd = 'precompute'
-    elif args['merge']:
-        cmd = 'merge'
+
+    # Figure which command was chosen
+    poss_cmds = ['new', 'add', 'precompute', 'merge', 'match']
+    cmdlist = [cmdname
+               for cmdname in poss_cmds
+               if args[cmdname]]
+    if len(cmdlist) != 1:
+        raise ValueError("must specify exactly one command")
+    # The actual command as a str
+    cmd = cmdlist[0]
+
+    # Setup the analyzer if we're using one (i.e., unless "merge")
+    analyzer = setup_analyzer(args) if cmd is not "merge" else None
+
+    # Set up the hash table, if we're using one (i.e., unless "precompute")
+    if cmd is not "precompute":
+        # For everything other than precompute, we need a database name
+        # Check we have one
+        dbasename = args['--dbase']
+        if not dbasename:
+            raise ValueError("dbase name must be provided if not precompute")
+        if cmd == "new":
+            # Create a new hash table
+            hash_tab = hash_table.HashTable(hashbits=int(args['--hashbits']),
+                                            depth=int(args['--bucketsize']),
+                                            maxtime=int(args['--maxtime']))
+            # Set its samplerate param
+            hash_tab.params['samplerate'] = analyzer.target_sr
+        else:
+            # Load existing hash table file (add, match, merge)
+            hash_tab = hash_table.HashTable(dbasename)
+            if analyzer and 'samplerate' in hash_tab.params \
+                   and hash_tab.params['samplerate'] != analyzer.target_sr:
+                analyzer.target_sr = hash_tab.params['samplerate']
+                print("samplerate set to", analyzer.target_sr,
+                      "per", dbasename)
     else:
-        cmd = 'match'
-    dbasename = args['<dbase>']
-    density = float(args['--density'])
-    hashbits = int(args['--hashbits'])
-    bucketsize = int(args['--bucketsize'])
-    maxtime = int(args['--maxtime'])
-    samplerate = int(args['--samplerate'])
-    listflag = args['--list']
-    verbose = int(args['--verbose'])
-    illustrate = args['--illustrate']
-    sortbytime = args['--sortbytime']
-    files = args['<file>']
-    precompdir = args['--precompdir']
-    shifts = int(args['--shifts'])
-    match_win = int(args['--match-win'])
-    min_count = int(args['--min-count'])
-    max_matches = int(args['--max-matches'])
-    wavdir = args['--wavdir']
-    opfile = args['--opfile']
-    maxpksperframe = int(args['--pks-per-frame'])
-    maxpairsperpeak = int(args['--fanout'])
-    f_sd = float(args['--freq-sd'])
-    ncores = int(args['--ncores'])
+        # The command IS precompute
+        # dummy empty hash table
+        hash_tab = None
 
-    # Setup output
-    if opfile and len(opfile):
-        f = open(opfile, "w")
-        report = lambda list: [f.write(msg+"\n") for msg in list]
-    else:
-        report = lambda list: [print(msg) for msg in list]
-
-    # Setup multiprocessing
-    # Don't need a separate multiproc flag, just use ncores
-    multiproc = (ncores > 1)
-    if multiproc:
-        #import multiprocessing  # for new/add
-        #import joblib           # for match
-        if ncores < 2:
-            print("You must specify at least 2 cores for multiproc mode")
-            return
-
-    # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
-    target_sr = samplerate # not always 11025, but always n_fft=512
-    n_fft = 512
-    n_hop = n_fft/2
+    # Setup output function
+    report = setup_reporter(args)
 
     # Keep track of wall time
     initticks = time.clock()
 
-    # Create analyzer object
-    analyzer = Analyzer(f_sd=f_sd, maxpksperframe=maxpksperframe,
-                        maxpairsperpeak=maxpairsperpeak,
-                        density=density, n_fft=n_fft, n_hop=n_hop,
-                        target_sr=target_sr)
+    # Create a matcher
+    matcher = setup_matcher(args) if cmd == 'match' else None
 
-    if cmd == 'new':
-        # Create a new hash table
-        ht = hash_table.HashTable(hashbits=hashbits, depth=bucketsize,
-                                  maxtime=maxtime)
-    elif cmd != 'precompute':
-        # Load existing
-        ht = hash_table.HashTable(dbasename)
-        if 'samplerate' in ht.params:
-            if ht.params['samplerate'] != target_sr:
-                target_sr = ht.params['samplerate']
-                print("samplerate set to", target_sr, "per", dbasename)
-    else:
-        # dummy empty hash table for precompute
-        ht = None
-
-    # set default value for shifts depending on mode
-    if shifts == 0:
-        if cmd == 'match':
-            # Default shifts is 4 for match
-            shifts = 4
-        else:
-            # default shifts is 1 for new/add/precompute
-            shifts = 1
-    # Store in analyzer
-    analyzer.shifts = shifts
+    filename_iter = filenames(args['<file>'],
+                              args['--wavdir'],
+                              args['--list'])
 
     #######################
     # Run the main commmand
     #######################
 
-    if cmd == 'merge':
-        # files are other hash tables, merge them in
-        for filename in filenames(files, wavdir, listflag):
-            ht2 = hash_table.HashTable(filename)
-            ht.merge(ht2)
-
-    elif cmd == 'precompute' and multiproc:
-        # precompute fingerprints with joblib
-        msgslist = joblib.Parallel(n_jobs=ncores)(
-            joblib.delayed(file_precompute)(analyzer, file, precompdir,
-                                            PRECOMPEXT)
-            for file in filenames(files, wavdir, listflag))
-        # Collapse into a single list of messages
-        for msgs in msgslist:
-            report(msgs)
-
-    elif cmd == 'precompute':
-        # just precompute fingerprints, single core
-        for filename in filenames(files, wavdir, listflag):
-            report(file_precompute(analyzer, filename, precompdir, PRECOMPEXT))
-
-    elif cmd == 'match' and multiproc:
-        # Running queries in parallel
-        msgslist = joblib.Parallel(n_jobs=ncores)(
-            joblib.delayed(file_match)(analyzer,
-                                       ht, filename, match_win,
-                                       min_count, max_matches,
-                                       sortbytime, illustrate,
-                                       verbose)
-            for filename in filenames(files, wavdir, listflag))
-        for msgs in msgslist:
-            report(msgs)
-
-    elif cmd == 'match':
-        # Running query, single-core mode
-        for filename in filenames(files, wavdir, listflag):
-            msgs = file_match(analyzer, ht, filename, match_win, min_count,
-                              max_matches, sortbytime, illustrate, verbose)
-            report(msgs)
-
-    elif multiproc: # and cmd == "new":
-        # run ncores in parallel to add new files to existing HT
-        # lists store per-process parameters
-        # Pipes to transfer results
-        rx = [[] for _ in range(ncores)]
-        tx = [[] for _ in range(ncores)]
-        # Process objects
-        pr = [[] for _ in range(ncores)]
-        # Lists of the distinct files
-        filelists = [[] for _ in range(ncores)]
-        # unpack all the files into ncores lists
-        for ix, filename in enumerate(filenames(files, wavdir, listflag)):
-            filelists[ix % ncores].append(filename)
-        # Launch each of the individual processes
-        for ix in range(ncores):
-            rx[ix], tx[ix] = multiprocessing.Pipe(False)
-            pr[ix] = multiprocessing.Process(target=make_ht_from_list,
-                                             args=(analyzer, filelists[ix],
-                                                   ht.hashbits, ht.depth,
-                                                   ht.maxtime,
-                                                   tx[ix]))
-            pr[ix].start()
-        # gather results when they all finish
-        for ix in range(ncores):
-            # thread passes back serialized hash table structure
-            htx = rx[ix].recv()
-            report(["ht " + str(ix) + " has " + str(len(htx.names)) + " files "
-                    + str(sum(htx.counts)) + " hashes"])
-            if len(ht.counts) == 0:
-                # Avoid merge into empty hash table, just keep the first one
-                ht = htx
-            else:
-                # merge in all the new items, hash entries
-                ht.merge(htx)
-            # finish that thread...
-            pr[ix].join()
-
+    # How many processors to use (multiprocessing)
+    ncores = int(args['--ncores'])
+    if ncores > 1 and cmd != "merge":
+        # "merge" is always a single-thread process
+        do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter,
+                         matcher, args['--precompdir'], report, ncores)
     else:
-        # Adding files - command was 'new' or 'add'
-        tothashes = 0
-        for ix, filename in enumerate(filenames(files, wavdir, listflag)):
-            report([time.ctime() + " ingesting #" + str(ix) + ":"
-                    + filename + " ..."])
-            dur, nhash = analyzer.ingest(ht, filename)
-            tothashes += nhash
-
-        report(["Added " +  str(tothashes) + " hashes "
-                + "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur))
-                + " hashes/sec)"])
+        do_cmd(cmd, analyzer, hash_tab, filename_iter,
+               matcher, args['--precompdir'], report)
 
     elapsedtime = time.clock() - initticks
-    totdur = analyzer.soundfiletotaldur
-    if totdur > 0.:
+    if analyzer and analyzer.soundfiletotaldur > 0.:
         print("Processed "
               + "%d files (%.1f s total dur) in %.1f s sec = %.3f x RT" \
-              % (analyzer.soundfilecount, totdur, elapsedtime,
-                 (elapsedtime/totdur)))
+              % (analyzer.soundfilecount, analyzer.soundfiletotaldur,
+                 elapsedtime, (elapsedtime/analyzer.soundfiletotaldur)))
 
-    if ht and ht.dirty:
-        ht.save(dbasename, {"samplerate":samplerate})
+    # Save the hash table file if it has been modified
+    if hash_tab and hash_tab.dirty:
+        hash_tab.save(dbasename)
 
 
 # Run the main function if called from the command line

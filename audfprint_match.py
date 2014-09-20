@@ -16,9 +16,9 @@ def find_mode(data, window=0):
     return (vals[bestix], counts[bestix])
 
 def locmax(x, indices=False):
-    """ Return a boolean vector of which points in x are local maxima.  
+    """ Return a boolean vector of which points in x are local maxima.
         End points are peaks if larger than single neighbors.
-        if indices=True, return the indices of the True values instead 
+        if indices=True, return the indices of the True values instead
         of the boolean vector. (originally from audfprint.py)
     """
     # x[-1]-1 means last value can be a peak
@@ -47,118 +47,174 @@ def find_modes(data, threshold=5, window=0):
     localmaxes = np.nonzero(locmax(fullvector) & (fullvector >= threshold))[0].tolist()
     return [(localmax+minval, fullvector[localmax]) for localmax in localmaxes]
 
-def match_hashes(ht, hashes, hashesfor=None, window=1, threshcount=5):
-    """ Match audio against fingerprint hash table.
-        Return top N matches as (id, filteredmatches, timoffs, rawmatches)
-        If hashesfor specified, return the actual matching hashes for that 
-        hit (0=top hit).
-    """
-    # find the implicated id, time pairs from hash table
-    #hits = np.array(ht.get_hits(hashes))
-    hits = ht.get_hits(hashes)
-    ## Sorted list of all the track ids that got hits
-    #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
-    ## Counts of unique entries in the sorted list - diff of locations of changes
-    #counts = np.diff(np.nonzero(idlist[:-1] != idlist[1:]))[0]
-    ## ids corresponding to each count - just read after the changes in the list
-    #ids = idlist[np.cumsum(counts)]
-    # Optimized version avoids so many loops
-    #allids = hits[:,0]
-    allids = np.array([id for id, time, hash, otime in hits])
-    alltimes = np.array([time for id, time, hash, otime in hits])
-    allhashes = np.array([hash for id, time, hash, otime in hits])
-    allotimes = np.array([otime for id, time, hash, otime in hits])
-    maxotime = np.max(allotimes)
-    ids = np.unique(allids)
-    counts = np.sum(np.equal.outer(ids, allids), axis=1)
 
-    # Find all the actual hits for a the most popular ids
-    bestcountsids = sorted(zip(counts, ids), reverse=True)
-    # Try the top 100 results
-    results = []
-    for rawcount, tid in bestcountsids[:100]:
-        #modescounts = find_modes([time for (id, time, hash, otime) in hits 
-        #                               if id == tid], 
-        #                              window=window, threshold=threshcount)
-        modescounts = find_modes(alltimes[np.nonzero(allids==tid)[0]], 
-                                 window=window, threshold=threshcount)
-        for (mode, filtcount) in modescounts:
-            #matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
-            #               if id == tid and abs(time - mode) <= window]
-            ## matchhashes may include repeats because multiple
-            ## ref hashes may match a single query hash under window.  Uniqify:
-            #matchhashes = sorted(list(set(matchhashes)))
-            matchix = np.nonzero((allids == tid) & (np.abs(alltimes - mode) <= window))[0]
-            matchhasheshash = np.unique(allotimes[matchix] + maxotime*allhashes[matchix])
-            matchhashes = [(hash % maxotime, hash / maxotime) for hash in matchhasheshash]
-            # much, much faster
-            filtcount = len(matchhashes)
-            results.append( (tid, filtcount, mode, rawcount, matchhashes) )
+class Matcher(object):
+    """Provide matching for audfprint fingerprint queries to hash table"""
 
-    results = sorted(results, key=lambda x:x[1], reverse=True)
-    # Make sure again to return only those meeting threshcount (needed??)
-    shortresults = [(tid, filtcount, mode, rawcount) 
-                    for (tid, filtcount, mode, rawcount, matchhashes) in results
-                      if filtcount >= threshcount]
+    def __init__(self):
+        """Set up default object values"""
+        # Tolerance window for time differences
+        self.window = 1
+        # Absolute minimum number of matching hashes to count as a match
+        self.threshcount = 5
+        # How many hits to return?
+        self.max_returns = 1
+        # Sort those returns by time (instead of counts)?
+        self.sort_by_time = False
+        # Verbose reporting?
+        self.verbose = False
+        # Do illustration?
+        self.illustrate = False
 
-    if hashesfor is not None:
-        return shortresults, results[hashesfor][4]
-    else:
-        return shortresults
+    def match_hashes(self, ht, hashes, hashesfor=None):
+        """ Match audio against fingerprint hash table.
+            Return top N matches as (id, filteredmatches, timoffs, rawmatches)
+            If hashesfor specified, return the actual matching hashes for that
+            hit (0=top hit).
+        """
+        # find the implicated id, time pairs from hash table
+        #hits = np.array(ht.get_hits(hashes))
+        hits = ht.get_hits(hashes)
+        ## Sorted list of all the track ids that got hits
+        #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
+        ## Counts of unique entries in the sorted list - diff of locations of changes
+        #counts = np.diff(np.nonzero(idlist[:-1] != idlist[1:]))[0]
+        ## ids corresponding to each count - just read after the changes in the list
+        #ids = idlist[np.cumsum(counts)]
+        # Optimized version avoids so many loops
+        #allids = hits[:,0]
+        allids = np.array([id for id, time, hash, otime in hits])
+        alltimes = np.array([time for id, time, hash, otime in hits])
+        allhashes = np.array([hash for id, time, hash, otime in hits])
+        allotimes = np.array([otime for id, time, hash, otime in hits])
+        maxotime = np.max(allotimes)
+        ids = np.unique(allids)
+        counts = np.sum(np.equal.outer(ids, allids), axis=1)
 
-def match_file(analyzer, ht, filename, window=1, threshcount=5, verbose=False):
-    """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
-    """
-    hq = analyzer.wavfile2hashes(filename)
-    # Fake durations as largest hash time
-    if len(hq) == 0:
-        durd = 0.0
-    else:
-        durd = float(analyzer.n_hop * hq[-1][0])/analyzer.target_sr
-    if verbose:
-        print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
-    # Run query
-    return match_hashes(ht, hq, window=window, threshcount=threshcount), \
-               durd, len(hq)
+        # Find all the actual hits for a the most popular ids
+        bestcountsids = sorted(zip(counts, ids), reverse=True)
+        # Try the top 100 results
+        results = []
+        for rawcount, tid in bestcountsids[:100]:
+            #modescounts = find_modes([time for (id, time, hash, otime) in hits
+            #                               if id == tid],
+            #                              window=window, threshold=threshcount)
+            modescounts = find_modes(alltimes[np.nonzero(allids==tid)[0]],
+                                     window=self.window,
+                                     threshold=self.threshcount)
+            for (mode, filtcount) in modescounts:
+                #matchhashes = [((otime), hash) for (id, time, hash, otime) in hits
+                #               if id == tid and abs(time - mode) <= window]
+                ## matchhashes may include repeats because multiple
+                ## ref hashes may match a single query hash under window.  Uniqify:
+                #matchhashes = sorted(list(set(matchhashes)))
+                matchix = np.nonzero((allids == tid)
+                                     & (np.abs(alltimes - mode) <= self.window))[0]
+                matchhasheshash = np.unique(allotimes[matchix]
+                                            + maxotime*allhashes[matchix])
+                matchhashes = [(hash % maxotime, hash / maxotime)
+                               for hash in matchhasheshash]
+                # much, much faster
+                filtcount = len(matchhashes)
+                results.append( (tid, filtcount, mode, rawcount, matchhashes) )
 
-# Graphical display of the match
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+        results = sorted(results, key=lambda x:x[1], reverse=True)
+        # Make sure again to return only those meeting threshcount (needed??)
+        shortresults = [(tid, filtcnt, mode, rawcount)
+                        for (tid, filtcnt, mode, rawcount, matchhashes) in results
+                        if filtcnt >= self.threshcount]
 
-def illustrate_match(analyzer, ht, filename, window=1, sortbytime=False):
-    """ Show the query fingerprints and the matching ones plotted over a spectrogram """
-    # Make the spectrogram
-    d, sr = librosa.load(filename, sr=analyzer.target_sr)
-    S = np.abs(librosa.stft(d, n_fft=analyzer.n_fft, hop_length=analyzer.n_hop, 
-                            window=np.hanning(analyzer.n_fft+2)[1:-1]))
-    S = 20.0*np.log10(np.maximum(S, np.max(S)/1e6))
-    S = S - np.max(S)
-    librosa.display.specshow(S, sr=sr, 
-                             y_axis='linear', x_axis='time', 
-                             cmap='gray_r', vmin=-80.0, vmax=0)
-    # Do the match
-    hq = analyzer.wavfile2hashes(filename)
-    # Run query, get back the hashes for match zero
-    results, matchhashes = match_hashes(ht, hq, hashesfor=0, window=window)
-    if sortbytime:
-        results = sorted(results, key=lambda x: -x[2])
-    # Convert the hashes to landmarks
-    lms = analyzer.hashes2landmarks(hq)
-    mlms = analyzer.hashes2landmarks(matchhashes)
-    # Overplot on the spectrogram
-    plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms]).T, 
-             np.array([[x[1],x[2]] for x in lms]).T, 
-             '.-g')
-    plt.plot(np.array([[x[0], x[0]+x[3]] for x in mlms]).T, 
-             np.array([[x[1],x[2]] for x in mlms]).T, 
-             '.-r')
-    # Add title
-    plt.title(filename + " : Matched as " + ht.names[results[0][0]]
-              + (" with %d of %d hashes" % (len(matchhashes), len(hq))))
-    # Display
-    plt.show()
-    # Return
-    return results
+        if hashesfor is not None:
+            return shortresults, results[hashesfor][4]
+        else:
+            return shortresults
+
+    def match_file(self, analyzer, ht, filename):
+        """ Read in an audio file, calculate its landmarks, query against hash table.  Return top N matches as (id, filterdmatchcount, timeoffs, rawmatchcount), also length of input file in sec, and count of raw query hashes extracted
+        """
+        hq = analyzer.wavfile2hashes(filename)
+        # Fake durations as largest hash time
+        if len(hq) == 0:
+            durd = 0.0
+        else:
+            durd = float(analyzer.n_hop * hq[-1][0])/analyzer.target_sr
+        if self.verbose:
+            print "Analyzed",filename,"of",('%.3f'%durd),"s to",len(hq),"hashes"
+        # Run query
+        rslts = self.match_hashes(ht, hq)
+        # Post filtering
+        if self.sort_by_time:
+            rslts = sorted(rslts, key=lambda x: -x[2])
+        return (rslts[:self.max_returns], durd, len(hq))
+
+    def file_match_to_msgs(self, analyzer, ht, qry):
+        """ Perform a match on a single input file, return list
+            of message strings """
+        rslts, dur, nhash = self.match_file(analyzer, ht, qry)
+        t_hop = analyzer.n_hop/float(analyzer.target_sr)
+        if self.verbose:
+            qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
+        else:
+            qrymsg = qry
+
+        msgrslt = []
+        if len(rslts) == 0:
+            # No matches returned at all
+            nhashaligned = 0
+            if self.verbose:
+                msgrslt.append("NOMATCH "+qrymsg)
+            else:
+                msgrslt.append(qrymsg+"\t")
+        else:
+            for (tophitid, nhashaligned, bestaligntime, nhashraw) in rslts:
+                # figure the number of raw and aligned matches for top hit
+                if self.verbose:
+                    msgrslt.append("Matched " + qrymsg + " as "
+                                   + ht.names[tophitid] \
+                                   + (" at %.3f " % (bestaligntime*t_hop)) + "s " \
+                                   + "with " + str(nhashaligned) \
+                                   + " of " + str(nhashraw) + " hashes")
+                else:
+                    msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
+                if self.illustrate:
+                    self.illustrate_match(analyzer, ht, qry)
+        return msgrslt
+
+    def illustrate_match(self, analyzer, ht, filename):
+        """ Show the query fingerprints and the matching ones plotted over a spectrogram """
+        # Make the spectrogram
+        d, sr = librosa.load(filename, sr=analyzer.target_sr)
+        S = np.abs(librosa.stft(d, n_fft=analyzer.n_fft,
+                                hop_length=analyzer.n_hop,
+                                window=np.hanning(analyzer.n_fft+2)[1:-1]))
+        S = 20.0*np.log10(np.maximum(S, np.max(S)/1e6))
+        S = S - np.max(S)
+        librosa.display.specshow(S, sr=sr,
+                                 y_axis='linear', x_axis='time',
+                                 cmap='gray_r', vmin=-80.0, vmax=0)
+        # Do the match?
+        hq = analyzer.wavfile2hashes(filename)
+        # Run query, get back the hashes for match zero
+        results, matchhashes = self.match_hashes(ht, hq, hashesfor=0)
+        if self.sort_by_time:
+            results = sorted(results, key=lambda x: -x[2])
+        # Convert the hashes to landmarks
+        lms = audfprint.hashes2landmarks(hq)
+        mlms = audfprint.hashes2landmarks(matchhashes)
+        # Overplot on the spectrogram
+        plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms]).T,
+                 np.array([[x[1],x[2]] for x in lms]).T,
+                 '.-g')
+        plt.plot(np.array([[x[0], x[0]+x[3]] for x in mlms]).T,
+                 np.array([[x[1],x[2]] for x in mlms]).T,
+                 '.-r')
+        # Add title
+        plt.title(filename + " : Matched as " + ht.names[results[0][0]]
+                  + (" with %d of %d hashes" % (len(matchhashes), len(hq))))
+        # Display
+        plt.show()
+        # Return
+        return results
 
 dotest = False
 if dotest:
