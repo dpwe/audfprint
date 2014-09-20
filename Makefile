@@ -7,6 +7,7 @@
 
 test: test_onecore test_onecore_precomp test_mucore test_mucore_precomp
 	rm -rf precompdir precompdir_mu
+	rm -f fpdbase*.pklz
 
 test_onecore: fpdbase.pklz audfprint_match.py
 	python audfprint.py match --dbase fpdbase.pklz query.mp3
