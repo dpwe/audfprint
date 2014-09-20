@@ -14,11 +14,11 @@ import os, gzip
 import scipy.io
 
 # Current format version
-HT_VERSION = 20140525
+HT_VERSION = 20140920
 # Earliest acceptable version
-HT_COMPAT_VERSION = 20140525
+HT_COMPAT_VERSION = 20140920
 
-class HashTable:
+class HashTable(object):
     """
     Simple hash table for storing and retrieving fingerprint hashes.
 
@@ -38,29 +38,33 @@ class HashTable:
             self.maxtime = maxtime
             # allocate the big table
             size = 2**hashbits
-            self.table = np.zeros( (size, depth), dtype=np.uint32 )
+            self.table = np.zeros((size, depth), dtype=np.uint32)
             # keep track of number of entries in each list
-            self.counts = np.zeros( size, dtype=np.int32 )
+            self.counts = np.zeros(size, dtype=np.int32)
             # map names to IDs
             self.names = []
             # track number of hashes stored per id
             self.hashesperid = []
             # Empty params
             self.params = {}
+            # Record the current version
+            self.ht_version = HT_VERSION
             # Mark as unsaved
             self.dirty = True
 
     def store(self, name, timehashpairs):
-        """ Store a list of hashes in the hash table associated with a particular name (or integer ID) and time. """
+        """ Store a list of hashes in the hash table
+            associated with a particular name (or integer ID) and time.
+        """
         if type(name) is str:
             # lookup name or assign new
             if name not in self.names:
                 self.names.append(name)
                 self.hashesperid.append(0)
-            id = self.names.index(name)
+            id_ = self.names.index(name)
         else:
             # we were passed in a numerical id
-            id = name
+            id_ = name
         # Now insert the hashes
         hashmask = (1 << self.hashbits) - 1
         #mxtime = self.maxtime
@@ -68,59 +72,64 @@ class HashTable:
         # Try sorting the pairs by hash value, for better locality in storing
         #sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
         sortedpairs = timehashpairs
-        # Tried making it an np array to permit vectorization, ends up slower...
-        #sortedpairs = np.array(sorted(timehashpairs, key=lambda x:x[1]), dtype=int)
+        # Tried making it an np array to permit vectorization, but slower...
+        #sortedpairs = np.array(sorted(timehashpairs, key=lambda x:x[1]),
+        #                       dtype=int)
         # Keep only the bottom part of the time value
         #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
         # Keep only the bottom part of the hash value
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
-        idval = id * self.maxtime
-        for time, hash in sortedpairs:
+        idval = id_ * self.maxtime
+        for time_, hash_ in sortedpairs:
             # How many already stored for this hash?
-            count = self.counts[hash]
+            count = self.counts[hash_]
             # Keep only the bottom part of the time value
-            #time %= mxtime
-            time &= timemask
+            #time_ %= mxtime
+            time_ &= timemask
             # Keep only the bottom part of the hash value
-            hash &= hashmask
+            hash_ &= hashmask
             # Mixin with ID
-            val = (idval + time) #.astype(np.uint32)
+            val = (idval + time_) #.astype(np.uint32)
             if count < self.depth:
                 # insert new val in next empty slot
-                #slot = self.counts[hash]
-                self.table[hash, count] = val
+                #slot = self.counts[hash_]
+                self.table[hash_, count] = val
             else:
                 # Choose a point at random
                 slot = random.randint(0, count)
                 # Only store if random slot wasn't beyond end
                 if slot < self.depth:
-                    self.table[hash, slot] = val
+                    self.table[hash_, slot] = val
             # Update record of number of vals in this bucket
-            self.counts[hash] = count + 1
+            self.counts[hash_] = count + 1
         # Record how many hashes we (attempted to) save for this id
-        self.hashesperid[id] += len(timehashpairs)
+        self.hashesperid[id_] += len(timehashpairs)
         # Mark as unsaved
         self.dirty = True
 
-    def get_entry(self, hash):
-        """ Return the list of (id, time) entries associate with the given hash"""
-        return [ ( int(val / self.maxtime), int(val % self.maxtime) )
-                 for val
-                   in self.table[hash, :min(self.depth, self.counts[hash])] ]
+    def get_entry(self, hash_):
+        """ Return the list of (id, time) entries
+            associate with the given hash
+        """
+        return [(int(val / self.maxtime), int(val % self.maxtime))
+                for val
+                in self.table[hash_, :min(self.depth, self.counts[hash_])]]
 
     def get_hits(self, hashes):
         """ Return a list of (id, delta_time, hash, time) tuples
-            associated with each element in hashes list of (time, hash) """
-        return [ (id, rtime-time, hash, time) for time, hash in hashes
-                                          for id, rtime in self.get_entry(hash)]
+            associated with each element in hashes list of (time, hash)
+        """
+        return [(id_, rtime-time_, hash_, time_) for time_, hash_ in hashes
+                for id_, rtime in self.get_entry(hash_)]
 
-    def save(self, name, params={}):
-        """ Save hash table to file <name>, including optional addition params """
+    def save(self, name, params=None):
+        """ Save hash table to file <name>,
+            including optional addition params
+        """
         # Merge in any provided params
-        for key in params:
-            self.params[key] = params[key]
-        # Record the current version
-        self.version = HT_VERSION
+        if params:
+            for key in params:
+                self.params[key] = params[key]
         with gzip.open(name, 'wb') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
@@ -130,7 +139,7 @@ class HashTable:
 
     def load(self, name):
         """ Read either pklz or mat-format hash table file """
-        stem, ext = os.path.splitext(name)
+        ext = os.path.splitext(name)[1]
         if ext == '.mat':
             params = self.load_matlab(name)
         else:
@@ -144,7 +153,7 @@ class HashTable:
         """ Read hash table values from file <name>, return params """
         with gzip.open(name, 'rb') as f:
             temp = pickle.load(f)
-        assert(temp.version >= HT_COMPAT_VERSION)
+        assert temp.ht_version >= HT_COMPAT_VERSION
         params = temp.params
         self.hashbits = temp.hashbits
         self.depth = temp.depth
@@ -153,6 +162,7 @@ class HashTable:
         self.counts = temp.counts
         self.names = temp.names
         self.hashesperid = temp.hashesperid
+        self.ht_version = temp.ht_version
         self.dirty = False
         return params
 
@@ -174,15 +184,16 @@ class HashTable:
         mht = scipy.io.loadmat(name)
         params = {}
         params['mat_version'] = mht['HT_params'][0][0][-1][0][0]
-        assert(params['mat_version'] >= 0.9)
-        self.hashbits = int(np.log(mht['HT_params'][0][0][0][0][0])/np.log(2.0))
+        assert params['mat_version'] >= 0.9
+        self.hashbits = int(np.log(mht['HT_params'][0][0][0][0][0]) /
+                            np.log(2.0))
         self.depth = mht['HT_params'][0][0][1][0][0]
         self.maxtime = mht['HT_params'][0][0][2][0][0]
         params['hoptime'] = mht['HT_params'][0][0][3][0][0]
         params['targetsr'] = mht['HT_params'][0][0][4][0][0]
         params['nojenkins'] = mht['HT_params'][0][0][5][0][0]
         # Python doesn't support the (pointless?) jenkins hashing
-        assert(params['nojenkins'])
+        assert params['nojenkins']
         self.table = mht['HashTable'].T
         self.counts = mht['HashTableCounts'][0]
         self.names = [str(val[0]) if len(val) > 0 else []
@@ -191,7 +202,7 @@ class HashTable:
         # Matlab uses 1-origin for the IDs in the hashes, so rather than
         # rewrite them all, we shift the corresponding decode tables
         # down one cell
-        self.names.insert(0,'')
+        self.names.insert(0, '')
         self.hashesperid = np.r_[[0], self.hashesperid]
         # Otherwise unmodified database
         self.dirty = False
@@ -205,20 +216,22 @@ class HashTable:
         """ Merge in the results from another hash table """
         # All the items go into our table, offset by our current size
         ncurrent = len(self.names)
-        size = len(self.counts)
+        #size = len(self.counts)
         self.names += ht.names
         self.hashesperid += ht.hashesperid
         # All the table values need to be increased by the ncurrent
         idoffset = self.maxtime * ncurrent
-        for hash in np.nonzero(ht.counts)[0]:
-            if self.counts[hash] + ht.counts[hash] <= self.depth:
-                self.table[hash, self.counts[hash]:(self.counts[hash]+ht.counts[hash])] \
-                   = ht.table[hash, :ht.counts[hash]] + idoffset
+        for hash_ in np.nonzero(ht.counts)[0]:
+            if self.counts[hash_] + ht.counts[hash_] <= self.depth:
+                self.table[hash_,
+                           self.counts[hash_]:(self.counts[hash_]
+                                               + ht.counts[hash_])] \
+                    = ht.table[hash_, :ht.counts[hash_]] + idoffset
             else:
                 # Need to subselect
-                allvals = np.r_[self.table[hash, :self.counts[hash]],
-                                ht.table[hash, :ht.counts[hash]]]
-                rp = np.random.permutation(range(len(allvals)))
-                self.table[hash,] = allvals[rp[:self.depth]]
-            self.counts[hash] += ht.counts[hash]
+                allvals = np.r_[self.table[hash_, :self.counts[hash_]],
+                                ht.table[hash_, :ht.counts[hash_]]]
+                rperm = np.random.permutation(range(len(allvals)))
+                self.table[hash_,] = allvals[rperm[:self.depth]]
+            self.counts[hash_] += ht.counts[hash_]
         self.dirty = True

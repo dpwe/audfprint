@@ -10,10 +10,16 @@ import os
 import numpy as np
 
 import scipy.signal
+
 # For reading/writing hashes to file
 import struct
-# For glob2hashtable
+
+# For glob2hashtable, localtester
 import glob
+import time
+
+# For utility, glob2hashtable
+import hash_table
 
 import librosa
 
@@ -373,6 +379,7 @@ class Analyzer(object):
 
 
 
+
 ########### functions to read/write hashes to file for a single track #####
 
 # Format string for writing binary data to file
@@ -400,7 +407,6 @@ def hashes_load(hashfilename):
             hashes.append(struct.unpack(HASH_FMT, data))
             data = f.read(fmtsize)
     return hashes
-
 
 ######## function signature for Gordon feature extraction
 ######## which stores the precalculated hashes for each track separately

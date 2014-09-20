@@ -13,8 +13,6 @@ import time
 # For command line interface
 import docopt
 import os
-# For reading/writing hashes to file
-import struct
 # For __main__
 import sys
 # For multiprocessing options
@@ -48,34 +46,6 @@ def ensure_dir(fname):
         if not os.path.exists(head):
             os.makedirs(head)
 
-########### functions to read/write hashes to file for a single track #####
-
-# Format string for writing binary data to file
-HASH_FMT = '<2i'
-HASH_MAGIC = 'audfprinthashV00'  # 16 chars, FWIW
-
-def hashes_save(hashfilename, hashes):
-    """ Write out a list of (time, hash) pairs as 32 bit ints """
-    with open(hashfilename, 'wb') as f:
-        f.write(HASH_MAGIC)
-        for time_, hash_ in hashes:
-            f.write(struct.pack(HASH_FMT, time_, hash_))
-
-def hashes_load(hashfilename):
-    """ Read back a set of hashes written by hashes_save """
-    hashes = []
-    fmtsize = struct.calcsize(HASH_FMT)
-    with open(hashfilename, 'rb') as f:
-        magic = f.read(len(HASH_MAGIC))
-        if magic != HASH_MAGIC:
-            raise IOError('%s is not a hash file (magic %s)'
-                          % (hashfilename, magic))
-        data = f.read(fmtsize)
-        while data is not None and len(data) == fmtsize:
-            hashes.append(struct.unpack(HASH_FMT, data))
-            data = f.read(fmtsize)
-    return hashes
-
 # Command line interface
 
 # basic operations, each in a separate function
@@ -94,7 +64,7 @@ def file_precompute(analyzer, filename, precompdir,
     # Make sure the directory exists
     ensure_dir(opfname)
     # save the hashes file
-    hashes_save(opfname, hashes)
+    audfprint_analyze.hashes_save(opfname, hashes)
     return ["wrote " + opfname + " ( %d hashes, %.3f sec)" \
                                    % (len(hashes), analyzer.soundfiledur)]
 
