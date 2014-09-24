@@ -182,7 +182,7 @@ class Analyzer(object):
                                                      + npoints - pos])
         return vec
 
-    def _fp_fwd(self, sgram, a_dec):
+    def _decaying_threshold_fwd_prune(self, sgram, a_dec):
         """ forward pass of findpeaks
             initial threshold envelope based on peaks in first 10 frames
         """
@@ -216,7 +216,7 @@ class Analyzer(object):
             sthresh *= a_dec
         return peaks
 
-    def _fp_bwd(self, sgram, peaks, a_dec):
+    def _decaying_threshold_bwd_prune_peaks(self, sgram, peaks, a_dec):
         """ backwards pass of findpeaks """
         scols = np.shape(sgram)[1]
         # Backwards filter to prune peaks
@@ -272,12 +272,13 @@ class Analyzer(object):
                                                [1, -(HPF_POLE)** \
                                                 (1/OVERSAMP)], s_row)
                           for s_row in sgram])[:-1,]
-
-        peaks = self._fp_fwd(sgram, a_dec)
-
-        peaks = self._fp_bwd(sgram, peaks, a_dec)
-
-        # build a list of peaks
+        # Prune to keep only local maxima in spectrum that appear above an online, 
+        # decaying threshold
+        peaks = self._decaying_threshold_fwd_prune(sgram, a_dec)
+        # Further prune these peaks working backwards in time, to remove small peaks 
+        # that are closely followed by a large peak
+        peaks = self._decaying_threshold_bwd_prune_peaks(sgram, peaks, a_dec)
+        # build a list of peaks we ended up with
         scols = np.shape(sgram)[1]
         pklist = [[] for _ in xrange(scols)]
         for col in xrange(scols):
