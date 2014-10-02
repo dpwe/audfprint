@@ -41,6 +41,10 @@ Uses librosa, get https://github.com/bmcfee/librosa or "pip install librosa"
 
 Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt or "pip install docopt"
 
+Also uses numpy and scipy, which need to be installed, e.g. "pip install numpy", "pip install scipy".
+
+Parallel processing relies on joblib module (and multiprocessing module), which are likely already installed.
+
 Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/ .  This python code will actually read and use databases created by the Matlab code (version 0.90 upwards).
 
 Usage
