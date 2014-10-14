@@ -26,6 +26,8 @@ import librosa
 ################ Globals ################
 # Special extension indicating precomputed fingerprint
 PRECOMPEXT = '.afpt'
+# A different precomputed fingerprint is just the peaks
+PRECOMPPKEXT = '.afpk'
 
 
 def locmax(vec, indices=False):
@@ -320,6 +322,32 @@ class Analyzer(object):
 
         return landmarks
 
+    def wavfile2peaks(self, filename):
+        """ Read a soundfile and return its landmark peaks as a
+            list of (time, bin) pairs.  If specified, resample to sr first.
+            shifts > 1 causes hashes to be extracted from multiple shifts of
+            waveform, to reduce frame effects.  """
+        ext = os.path.splitext(filename)[1]
+        if ext == PRECOMPPKEXT:
+            # short-circuit - precomputed fingerprint file
+            peaklists = [peaks_load(filename)]
+            dur = np.max(peaklists[0], axis=0)[0]*self.n_hop/float(self.target_sr)
+        else:
+            [d, sr] = librosa.load(filename, sr=self.target_sr)
+            # Store duration in a global because it's hard to handle
+            dur = float(len(d))/sr
+            # Calculate hashes with optional part-frame shifts
+            peaklists = []
+            for shift in range(self.shifts):
+                shiftsamps = int(float(shift)/self.shifts*self.n_hop)
+                peaklists.append(self.find_peaks(d[shiftsamps:], sr))
+
+        # instrumentation to track total amount of sound processed
+        self.soundfiledur = dur
+        self.soundfiletotaldur += dur
+        self.soundfilecount += 1
+        return peaklists
+
     def wavfile2hashes(self, filename):
         """ Read a soundfile and return its fingerprint hashes as a
             list of (time, hash) pairs.  If specified, resample to sr first.
@@ -330,26 +358,20 @@ class Analyzer(object):
             # short-circuit - precomputed fingerprint file
             hashes = hashes_load(filename)
             dur = np.max(hashes, axis=0)[0]*self.n_hop/float(self.target_sr)
+            # instrumentation to track total amount of sound processed
+            self.soundfiledur = dur
+            self.soundfiletotaldur += dur
+            self.soundfilecount += 1
         else:
-            [d, sr] = librosa.load(filename, sr=self.target_sr)
-            # Store duration in a global because it's hard to handle
-            dur = float(len(d))/sr
-            # Calculate hashes with optional part-frame shifts
+            peaklists = self.wavfile2peaks(filename)
             query_hashes = []
-            for shift in range(self.shifts):
-                shiftsamps = int(float(shift)/self.shifts*self.n_hop)
+            for peaklist in peaklists:
                 query_hashes += landmarks2hashes(
-                    self.peaks2landmarks(
-                        self.find_peaks(d[shiftsamps:], sr)
-                    )
+                    self.peaks2landmarks(peaklist)
                 )
             # remove duplicate elements by pushing through a set
             hashes = sorted(list(set(query_hashes)))
 
-        # instrumentation to track total amount of sound processed
-        self.soundfiledur = dur
-        self.soundfiletotaldur += dur
-        self.soundfilecount += 1
         #print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
 
@@ -392,6 +414,8 @@ class Analyzer(object):
 # Format string for writing binary data to file
 HASH_FMT = '<2i'
 HASH_MAGIC = 'audfprinthashV00'  # 16 chars, FWIW
+PEAK_FMT = '<2i'
+PEAK_MAGIC = 'audfprintpeakV00'  # 16 chars, FWIW
 
 def hashes_save(hashfilename, hashes):
     """ Write out a list of (time, hash) pairs as 32 bit ints """
@@ -414,6 +438,28 @@ def hashes_load(hashfilename):
             hashes.append(struct.unpack(HASH_FMT, data))
             data = f.read(fmtsize)
     return hashes
+
+def peaks_save(peakfilename, peaks):
+    """ Write out a list of (time, bin) pairs as 32 bit ints """
+    with open(peakfilename, 'wb') as f:
+        f.write(PEAK_MAGIC)
+        for time_, bin_ in peaks:
+            f.write(struct.pack(PEAK_FMT, time_, bin_))
+
+def peaks_load(peakfilename):
+    """ Read back a set of (time, bin) pairs written by peaks_save """
+    peaks = []
+    fmtsize = struct.calcsize(PEAK_FMT)
+    with open(peakfilename, 'rb') as f:
+        magic = f.read(len(PEAK_MAGIC))
+        if magic != PEAK_MAGIC:
+            raise IOError('%s is not a peak file (magic %s)'
+                          % (peakfilename, magic))
+        data = f.read(fmtsize)
+        while data is not None and len(data) == fmtsize:
+            peaks.append(struct.unpack(PEAK_FMT, data))
+            data = f.read(fmtsize)
+    return peaks
 
 ######## function signature for Gordon feature extraction
 ######## which stores the precalculated hashes for each track separately

@@ -50,8 +50,26 @@ def ensure_dir(fname):
 
 # basic operations, each in a separate function
 
-def file_precompute(analyzer, filename, precompdir,
-                    precompext=audfprint_analyze.PRECOMPEXT):
+def file_precompute_peaks(analyzer, filename, precompdir,
+                           precompext=audfprint_analyze.PRECOMPPKEXT):
+    """ Perform precompute action for one file, return list
+        of message strings """
+    peaks = analyzer.wavfile2peaks(filename)[0]
+    # strip relative directory components from file name
+    # Also remove leading absolute path (comp == '')
+    relname = '/'.join([comp for comp in filename.split('/')
+                        if comp != '.' and comp != '..' and comp != ''])
+    root = os.path.splitext(relname)[0]
+    opfname = os.path.join(precompdir, root+precompext)
+    # Make sure the directory exists
+    ensure_dir(opfname)
+    # save the hashes file
+    audfprint_analyze.peaks_save(opfname, peaks)
+    return ["wrote " + opfname + " ( %d peaks, %.3f sec)" \
+                                   % (len(peaks), analyzer.soundfiledur)]
+
+def file_precompute_hashes(analyzer, filename, precompdir,
+                          precompext=audfprint_analyze.PRECOMPEXT):
     """ Perform precompute action for one file, return list
         of message strings """
     hashes = analyzer.wavfile2hashes(filename)
@@ -67,6 +85,14 @@ def file_precompute(analyzer, filename, precompdir,
     audfprint_analyze.hashes_save(opfname, hashes)
     return ["wrote " + opfname + " ( %d hashes, %.3f sec)" \
                                    % (len(hashes), analyzer.soundfiledur)]
+
+def file_precompute(analyzer, filename, precompdir, type='peaks'):
+    """ Perform precompute action for one file, return list
+        of message strings """
+    if type == 'peaks':
+        return file_precompute_peaks(analyzer, filename, precompdir)
+    else:
+        return file_precompute_hashes(analyzer, filename, precompdir)
 
 def make_ht_from_list(analyzer, filelist, proto_hash_tab, pipe=None):
     """ Populate a hash table from a list, used as target for
@@ -88,7 +114,7 @@ def make_ht_from_list(analyzer, filelist, proto_hash_tab, pipe=None):
     else:
         return ht
 
-def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, report):
+def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report):
     """ Breaks out the core part of running the command.
         This is just the single-core versions.
     """
@@ -101,8 +127,7 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, report):
     elif cmd == 'precompute':
         # just precompute fingerprints, single core
         for filename in filename_iter:
-            report(file_precompute(analyzer, filename,
-                                   outdir, audfprint_analyze.PRECOMPEXT))
+            report(file_precompute(analyzer, filename, outdir, type))
 
     elif cmd == 'match':
         # Running query, single-core mode
@@ -172,13 +197,12 @@ def matcher_file_match_to_msgs(matcher, analyzer, hash_tab, filename):
     return matcher.file_match_to_msgs(analyzer, hash_tab, filename)
 
 def do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter, matcher,
-                     outdir, report, ncores):
+                     outdir, type, report, ncores):
     """ Run the actual command, using multiple processors """
     if cmd == 'precompute':
         # precompute fingerprints with joblib
         msgslist = joblib.Parallel(n_jobs=ncores)(
-            joblib.delayed(file_precompute)(analyzer, file, outdir,
-                                            audfprint_analyze.PRECOMPEXT)
+            joblib.delayed(file_precompute)(analyzer, file, outdir, type)
             for file in filename_iter
         )
         # Collapse into a single list of messages
@@ -284,6 +308,7 @@ Options:
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
   -H <val>, --ncores <val>        Number of processes to use [default: 1]
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
+  -K, --precompute-peaks          Precompute just landmarks (else full hashes)
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
@@ -313,6 +338,8 @@ def main(argv):
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if cmd is not "merge" else None
 
+    precomp_type = 'hashes'
+
     # Set up the hash table, if we're using one (i.e., unless "precompute")
     if cmd is not "precompute":
         # For everything other than precompute, we need a database name
@@ -339,6 +366,8 @@ def main(argv):
         # The command IS precompute
         # dummy empty hash table
         hash_tab = None
+        if args['--precompute-peaks']:
+            precomp_type = 'peaks'
 
     # Setup output function
     report = setup_reporter(args)
@@ -362,10 +391,11 @@ def main(argv):
     if ncores > 1 and cmd != "merge":
         # "merge" is always a single-thread process
         do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter,
-                         matcher, args['--precompdir'], report, ncores)
+                         matcher, args['--precompdir'],
+                         precomp_type, report, ncores)
     else:
         do_cmd(cmd, analyzer, hash_tab, filename_iter,
-               matcher, args['--precompdir'], report)
+               matcher, args['--precompdir'], precomp_type, report)
 
     elapsedtime = time.clock() - initticks
     if analyzer and analyzer.soundfiletotaldur > 0.:
