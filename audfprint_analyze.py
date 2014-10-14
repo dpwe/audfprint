@@ -272,37 +272,44 @@ class Analyzer(object):
                                                [1, -(HPF_POLE)** \
                                                 (1/OVERSAMP)], s_row)
                           for s_row in sgram])[:-1,]
-        # Prune to keep only local maxima in spectrum that appear above an online, 
+        # Prune to keep only local maxima in spectrum that appear above an online,
         # decaying threshold
         peaks = self._decaying_threshold_fwd_prune(sgram, a_dec)
-        # Further prune these peaks working backwards in time, to remove small peaks 
+        # Further prune these peaks working backwards in time, to remove small peaks
         # that are closely followed by a large peak
         peaks = self._decaying_threshold_bwd_prune_peaks(sgram, peaks, a_dec)
         # build a list of peaks we ended up with
         scols = np.shape(sgram)[1]
-        pklist = [[] for _ in xrange(scols)]
+        pklist = []
         for col in xrange(scols):
-            pklist[col] = np.nonzero(peaks[:, col])[0]
+            for bin in np.nonzero(peaks[:, col])[0]:
+                pklist.append( (col, bin) )
         return pklist
 
     def peaks2landmarks(self, pklist):
         """ Take a list of local peaks in spectrogram
             and form them into pairs as landmarks.
-            peaks[i] is a list of the fft bins identified as landmark peaks
-            for time frame i (which will be empty for many frames).
+            pklist is a column-sorted list of (col, bin) pairs as created
+            by findpeaks().
             Return a list of (col, peak, peak2, col2-col) landmark descriptors.
         """
         # Form pairs of peaks into landmarks
-        scols = len(pklist)
+        # Find column of the final peak in the list
+        scols = pklist[-1][0] + 1
+        # Convert (col, bin) list into peaks_at[col] lists
+        peaks_at = [[] for col in xrange(scols)]
+        for (col, bin) in pklist:
+            peaks_at[col].append(bin)
+
         # Build list of landmarks <starttime F1 endtime F2>
         landmarks = []
         for col in xrange(scols):
-            for peak in pklist[col]:
+            for peak in peaks_at[col]:
                 pairsthispeak = 0
                 for col2 in xrange(col+self.mindt,
                                    min(scols, col+self.targetdt)):
                     if pairsthispeak < self.maxpairsperpeak:
-                        for peak2 in pklist[col2]:
+                        for peak2 in peaks_at[col2]:
                             if abs(peak2-peak) < self.targetdf:
                                 #and abs(peak2-peak) + abs(col2-col) > 2 ):
                                 if pairsthispeak < self.maxpairsperpeak:
@@ -333,8 +340,7 @@ class Analyzer(object):
                 shiftsamps = int(float(shift)/self.shifts*self.n_hop)
                 query_hashes += landmarks2hashes(
                     self.peaks2landmarks(
-                        self.find_peaks(d[shiftsamps:],
-                                        sr)
+                        self.find_peaks(d[shiftsamps:], sr)
                     )
                 )
             # remove duplicate elements by pushing through a set
