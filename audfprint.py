@@ -39,12 +39,11 @@ def filenames(filelist, wavdir, listflag):
                     yield os.path.join(wavdir, filename.rstrip('\n'))
 
 # for saving precomputed fprints
-def ensure_dir(fname):
-    """ ensure that the directory for the named path exists """
-    head = os.path.split(fname)[0]
-    if len(head):
-        if not os.path.exists(head):
-            os.makedirs(head)
+def ensure_dir(dirname):
+    """ ensure that the named directory exists """
+    if len(dirname):
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
 
 # Command line interface
 
@@ -62,7 +61,7 @@ def file_precompute_peaks(analyzer, filename, precompdir,
     root = os.path.splitext(relname)[0]
     opfname = os.path.join(precompdir, root+precompext)
     # Make sure the directory exists
-    ensure_dir(opfname)
+    ensure_dir(os.path.split(opfname)[0])
     # save the hashes file
     audfprint_analyze.peaks_save(opfname, peaks)
     return ["wrote " + opfname + " ( %d peaks, %.3f sec)" \
@@ -80,7 +79,7 @@ def file_precompute_hashes(analyzer, filename, precompdir,
     root = os.path.splitext(relname)[0]
     opfname = os.path.join(precompdir, root+precompext)
     # Make sure the directory exists
-    ensure_dir(opfname)
+    ensure_dir(os.path.split(opfname)[0])
     # save the hashes file
     audfprint_analyze.hashes_save(opfname, hashes)
     return ["wrote " + opfname + " ( %d hashes, %.3f sec)" \

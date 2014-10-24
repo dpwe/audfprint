@@ -57,6 +57,9 @@ ncores = config.getint(section, 'ncores')
 
 print sys.argv[0], "density:", density, "fanout:", fanout, "ncores:", ncores
 
+# Ensure the database directory exists
+audfprint.ensure_dir(dir4db)
+
 # Run the command
 argv = ["audfprint", "new", 
         "-d", os.path.join(dir4db, "data.fpdb"), 
