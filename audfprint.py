@@ -257,6 +257,7 @@ def setup_matcher(args):
     matcher.window = int(args['--match-win'])
     matcher.threshold = int(args['--min-count'])
     matcher.max_returns = int(args['--max-matches'])
+    matcher.search_depth = int(args['--search-depth'])
     matcher.sort_by_time = args['--sortbytime']
     matcher.illustrate = args['--illustrate']
     matcher.verbose = args['--verbose']
@@ -305,6 +306,7 @@ Options:
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
+  -D <val>, --search-depth <val>  How far down to search raw matching track list [default: 100]
   -H <val>, --ncores <val>        Number of processes to use [default: 1]
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -K, --precompute-peaks          Precompute just landmarks (else full hashes)
