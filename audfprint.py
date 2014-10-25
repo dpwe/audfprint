@@ -53,7 +53,7 @@ def file_precompute_peaks(analyzer, filename, precompdir,
                            precompext=audfprint_analyze.PRECOMPPKEXT):
     """ Perform precompute action for one file, return list
         of message strings """
-    peaks = analyzer.wavfile2peaks(filename)[0]
+    peaks = analyzer.wavfile2peaks(filename)
     # strip relative directory components from file name
     # Also remove leading absolute path (comp == '')
     relname = '/'.join([comp for comp in filename.split('/')

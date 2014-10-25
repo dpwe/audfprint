@@ -322,7 +322,7 @@ class Analyzer(object):
 
         return landmarks
 
-    def wavfile2peaks(self, filename):
+    def wavfile2peaks(self, filename, shifts=None):
         """ Read a soundfile and return its landmark peaks as a
             list of (time, bin) pairs.  If specified, resample to sr first.
             shifts > 1 causes hashes to be extracted from multiple shifts of
@@ -330,23 +330,27 @@ class Analyzer(object):
         ext = os.path.splitext(filename)[1]
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
-            peaklists = [peaks_load(filename)]
+            peaks = peaks_load(filename)
             dur = np.max(peaklists[0], axis=0)[0]*self.n_hop/float(self.target_sr)
         else:
             [d, sr] = librosa.load(filename, sr=self.target_sr)
             # Store duration in a global because it's hard to handle
             dur = float(len(d))/sr
-            # Calculate hashes with optional part-frame shifts
-            peaklists = []
-            for shift in range(self.shifts):
-                shiftsamps = int(float(shift)/self.shifts*self.n_hop)
-                peaklists.append(self.find_peaks(d[shiftsamps:], sr))
+            if shifts is None or shifts < 2:
+                peaks = self.find_peaks(d, sr);
+            else:
+                # Calculate hashes with optional part-frame shifts
+                peaklists = []
+                for shift in range(shifts):
+                    shiftsamps = int(float(shift)/self.shifts*self.n_hop)
+                    peaklists.append(self.find_peaks(d[shiftsamps:], sr))
+                peaks = peaklists
 
         # instrumentation to track total amount of sound processed
         self.soundfiledur = dur
         self.soundfiletotaldur += dur
         self.soundfilecount += 1
-        return peaklists
+        return peaks
 
     def wavfile2hashes(self, filename):
         """ Read a soundfile and return its fingerprint hashes as a
@@ -363,12 +367,17 @@ class Analyzer(object):
             self.soundfiletotaldur += dur
             self.soundfilecount += 1
         else:
-            peaklists = self.wavfile2peaks(filename)
-            query_hashes = []
-            for peaklist in peaklists:
-                query_hashes += landmarks2hashes(
-                    self.peaks2landmarks(peaklist)
-                )
+            peaks = self.wavfile2peaks(filename, self.shifts)
+            if self.shifts and self.shifts > 1:
+                peaklists = peaks
+                query_hashes = []
+                for peaklist in peaklists:
+                    query_hashes += landmarks2hashes(
+                        self.peaks2landmarks(peaklist)
+                    )
+            else:
+                query_hashes = landmarks2hashes(self.peaks2landmarks(peaks))
+
             # remove duplicate elements by pushing through a set
             hashes = sorted(list(set(query_hashes)))
 
