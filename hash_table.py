@@ -108,19 +108,24 @@ class HashTable(object):
         self.dirty = True
 
     def get_entry(self, hash_):
-        """ Return the list of (id, time) entries
-            associate with the given hash
+        """ Return np.array of [id, time] entries
+            associate with the given hash as rows.
         """
-        return [(int(val / self.maxtime), int(val % self.maxtime))
-                for val
-                in self.table[hash_, :min(self.depth, self.counts[hash_])]]
+        vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
+        return np.c_[vals / self.maxtime, vals % self.maxtime]
 
     def get_hits(self, hashes):
-        """ Return a list of (id, delta_time, hash, time) tuples
-            associated with each element in hashes list of (time, hash)
+        """ Return np.array of [id, delta_time, hash, time] rows
+            associated with each element in hashes array of [time, hash] rows
         """
-        return [(id_, rtime-time_, hash_, time_) for time_, hash_ in hashes
-                for id_, rtime in self.get_entry(hash_)]
+        hits = np.zeros((0, 4), np.uint32)
+        for time_, hash_ in hashes:
+            idstimes = self.get_entry(hash_)
+            hitsthishash = np.c_[idstimes[:,0], idstimes[:,1]-time_,
+                                 np.tile(np.array([hash_, time_]),
+                                         (np.shape(idstimes)[0], 1))]
+            hits = np.r_[hits, hitsthishash]
+        return hits
 
     def save(self, name, params=None):
         """ Save hash table to file <name>,

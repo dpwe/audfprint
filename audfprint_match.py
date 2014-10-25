@@ -7,6 +7,7 @@ Fingerprint matching code for audfprint
 """
 import librosa
 import numpy as np
+import time
 
 # for localtest and illustrate
 import audfprint_analyze
@@ -69,6 +70,8 @@ class Matcher(object):
         self.threshcount = 5
         # How many hits to return?
         self.max_returns = 1
+        # How deep to search in return list?
+        self.search_depth = 100
         # Sort those returns by time (instead of counts)?
         self.sort_by_time = False
         # Verbose reporting?
@@ -83,7 +86,6 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        #hits = np.array(ht.get_hits(hashes))
         hits = ht.get_hits(hashes)
         ## Sorted list of all the track ids that got hits
         #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
@@ -95,19 +97,25 @@ class Matcher(object):
         #ids = idlist[np.cumsum(counts)]
         # Optimized version avoids so many loops
         #allids = hits[:,0]
-        allids = np.array([id_ for id_, time_, hash_, otime in hits])
-        alltimes = np.array([time_ for id_, time_, hash_, otime in hits])
-        allhashes = np.array([hash_ for id_, time_, hash_, otime in hits])
-        allotimes = np.array([otime for id_, time_, hash_, otime in hits])
+        #
+        #allids = np.array([id_ for id_, time_, hash_, otime in hits])
+        #alltimes = np.array([time_ for id_, time_, hash_, otime in hits])
+        #allhashes = np.array([hash_ for id_, time_, hash_, otime in hits])
+        #allotimes = np.array([otime for id_, time_, hash_, otime in hits])
+        allids = hits[:, 0]
+        alltimes = hits[:, 1]
+        allhashes = hits[:, 2]
+        allotimes = hits[:, 3]
+
         maxotime = np.max(allotimes)
         ids = np.unique(allids)
         counts = np.sum(np.equal.outer(ids, allids), axis=1)
 
         # Find all the actual hits for a the most popular ids
         bestcountsids = sorted(zip(counts, ids), reverse=True)
-        # Try the top 100 results
+        # Try the top N results
         results = []
-        for rawcount, tid in bestcountsids[:100]:
+        for rawcount, tid in bestcountsids[:self.search_depth]:
             #modescounts = find_modes([time for (id, time, hash, otime) in hits
             #                          if id == tid],
             #                          window=window, threshold=threshcount)
@@ -144,7 +152,7 @@ class Matcher(object):
         else:
             return shortresults
 
-    def match_file(self, analyzer, ht, filename):
+    def match_file(self, analyzer, ht, filename, number=None):
         """ Read in an audio file, calculate its landmarks, query against
             hash table.  Return top N matches as (id, filterdmatchcount,
             timeoffs, rawmatchcount), also length of input file in sec,
@@ -157,8 +165,13 @@ class Matcher(object):
         else:
             durd = float(analyzer.n_hop * q_hashes[-1][0])/analyzer.target_sr
         if self.verbose:
-            print "Analyzed", filename, "of", ('%.3f'%durd), "s " \
-                "to", len(q_hashes), "hashes"
+            if number is not None:
+                numberstring = "#%d"%number
+            else:
+                numberstring = ""
+            print time.ctime(), "Analyzed", numberstring, filename, "of", \
+                  ('%.3f'%durd), "s " \
+                  "to", len(q_hashes), "hashes"
         # Run query
         rslts = self.match_hashes(ht, q_hashes)
         # Post filtering
