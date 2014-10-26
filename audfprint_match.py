@@ -8,10 +8,18 @@ Fingerprint matching code for audfprint
 import librosa
 import numpy as np
 import time
-
+# for checking phys mem size
+import resource
 # for localtest and illustrate
 import audfprint_analyze
 import matplotlib.pyplot as plt
+
+def log(message):
+    """ log info with stats """
+    print time.ctime(), \
+        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
+        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
+        message
 
 def find_mode(data, window=0):
     """ Find the (mode, count) of a set of data
@@ -86,7 +94,9 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
+        log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
+        log("nhits=%d" % np.shape(hits)[0])
         ## Sorted list of all the track ids that got hits
         #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
         ## Counts of unique entries in the sorted list
@@ -109,9 +119,11 @@ class Matcher(object):
 
         maxotime = np.max(allotimes)
         ids = np.unique(allids)
+        log("nids=%d" % np.size(ids))
         #counts = np.sum(np.equal.outer(ids, allids), axis=1)
         # much faster, and doesn't explode memory
         counts = np.bincount(allids)[ids]
+        log("max(counts)=%d" % np.amax(counts))
 
         # Find all the actual hits for a the most popular ids
         bestcountsids = sorted(zip(counts, ids), reverse=True)
