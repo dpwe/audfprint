@@ -18,11 +18,12 @@ from scipy import stats
 
 def log(message):
     """ log info with stats """
+    pass
+
     #print time.ctime(), \
     #    "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
     #    "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
     #    message
-    pass
 
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
@@ -88,21 +89,6 @@ class Matcher(object):
         log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
         log("nhits=%d" % np.shape(hits)[0])
-        ## Sorted list of all the track ids that got hits
-        #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
-        ## Counts of unique entries in the sorted list
-        ## - diff of locations of changes
-        #counts = np.diff(np.nonzero(idlist[:-1] != idlist[1:]))[0]
-        ## ids corresponding to each count
-        ## - just read after the changes in the list
-        #ids = idlist[np.cumsum(counts)]
-        # Optimized version avoids so many loops
-        #allids = hits[:,0]
-        #
-        #allids = np.array([id_ for id_, time_, hash_, otime in hits])
-        #alltimes = np.array([time_ for id_, time_, hash_, otime in hits])
-        #allhashes = np.array([hash_ for id_, time_, hash_, otime in hits])
-        #allotimes = np.array([otime for id_, time_, hash_, otime in hits])
         allids = hits[:, 0]
         alltimes = hits[:, 1]
         allhashes = hits[:, 2]
@@ -111,20 +97,25 @@ class Matcher(object):
         maxotime = np.max(allotimes)
         ids = np.unique(allids)
         #log("nids=%d" % np.size(ids))
-        #counts = np.sum(np.equal.outer(ids, allids), axis=1)
+        #rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
         # much faster, and doesn't explode memory
-        counts = np.bincount(allids)[ids]
-        log("max(counts)=%d" % np.amax(counts))
+        rawcounts = np.bincount(allids)[ids]
+        wtdcounts = rawcounts/(ht.hashesperid[ids].astype(float))
+        log("max(rawcounts)=%d" % np.amax(rawcounts))
 
         # Find all the actual hits for a the most popular ids
-        bestcountsids = sorted(zip(counts, ids), reverse=True)
-        maxdepth = np.minimum(np.count_nonzero(np.greater(counts, self.threshcount)), self.search_depth)
+        bestcountsixs = np.argsort(wtdcounts)[::-1]
+        maxdepth = np.minimum(np.count_nonzero(np.greater(rawcounts, self.threshcount)), self.search_depth)
         # Try the top N results
         results = []
+        log("len(rawcounts)=%d max(bestcountsixs)=%d" % (len(rawcounts), max(bestcountsixs)))
         if not self.exact_count:
             mintime = np.amin(alltimes)
             alltimes -= mintime
-            for rawcount, tid in bestcountsids[:maxdepth]:
+            for ix in bestcountsixs[:maxdepth]:
+                #log("ix=%d"%ix)
+                rawcount = rawcounts[ix]
+                tid  = ids[ix]
                 tidtimes = alltimes[allids==tid]
                 if np.amax(np.bincount(tidtimes)) <= self.threshcount:
                     continue

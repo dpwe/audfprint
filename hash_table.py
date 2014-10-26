@@ -44,7 +44,7 @@ class HashTable(object):
             # map names to IDs
             self.names = []
             # track number of hashes stored per id
-            self.hashesperid = []
+            self.hashesperid = np.zeros(0, np.uint32)
             # Empty params
             self.params = {}
             # Record the current version
@@ -57,7 +57,7 @@ class HashTable(object):
         self.table[:,:] = 0
         self.counts[:] = 0
         self.names = []
-        self.hashesperid = []
+        self.hashesperid.resize(0)
         self.dirty = True
 
     def store(self, name, timehashpairs):
@@ -182,7 +182,7 @@ class HashTable(object):
         self.table = temp.table
         self.counts = temp.counts
         self.names = temp.names
-        self.hashesperid = temp.hashesperid
+        self.hashesperid = np.array(temp.hashesperid).astype(np.uint32)
         self.ht_version = temp.ht_version
         self.dirty = False
         return params
@@ -219,7 +219,7 @@ class HashTable(object):
         self.counts = mht['HashTableCounts'][0]
         self.names = [str(val[0]) if len(val) > 0 else []
                       for val in mht['HashTableNames'][0]]
-        self.hashesperid = mht['HashTableLengths'][0]
+        self.hashesperid = np.array(mht['HashTableLengths'][0]).astype(uint32)
         # Matlab uses 1-origin for the IDs in the hashes, so rather than
         # rewrite them all, we shift the corresponding decode tables
         # down one cell
