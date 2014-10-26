@@ -112,17 +112,18 @@ class HashTable(object):
             associate with the given hash as rows.
         """
         vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
-        return np.c_[vals / self.maxtime, vals % self.maxtime]
+        return np.c_[vals / self.maxtime, vals % self.maxtime].astype(np.int32)
 
     def get_hits(self, hashes):
         """ Return np.array of [id, delta_time, hash, time] rows
             associated with each element in hashes array of [time, hash] rows
         """
-        hits = np.zeros((0, 4), np.uint32)
+        hits = np.zeros((0, 4), np.int32)
         for time_, hash_ in hashes:
             idstimes = self.get_entry(hash_)
             hitsthishash = np.c_[idstimes[:,0], idstimes[:,1]-time_,
-                                 np.tile(np.array([hash_, time_]),
+                                 np.tile(np.array([hash_, time_])
+                                         .astype(np.int32),
                                          (np.shape(idstimes)[0], 1))]
             hits = np.r_[hits, hitsthishash]
         return hits

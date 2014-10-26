@@ -109,7 +109,9 @@ class Matcher(object):
 
         maxotime = np.max(allotimes)
         ids = np.unique(allids)
-        counts = np.sum(np.equal.outer(ids, allids), axis=1)
+        #counts = np.sum(np.equal.outer(ids, allids), axis=1)
+        # much faster, and doesn't explode memory
+        counts = np.bincount(allids)[ids]
 
         # Find all the actual hits for a the most popular ids
         bestcountsids = sorted(zip(counts, ids), reverse=True)
