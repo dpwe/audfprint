@@ -14,21 +14,15 @@ import resource
 import audfprint_analyze
 import matplotlib.pyplot as plt
 
+from scipy import stats
+
 def log(message):
     """ log info with stats """
-    print time.ctime(), \
-        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
-        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
-        message
-
-def find_mode(data, window=0):
-    """ Find the (mode, count) of a set of data
-    including a tolerance window +/- window if > 0
-    """
-    vals = np.unique(data)
-    counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
-    bestix = np.argmax(counts)
-    return (vals[bestix], counts[bestix])
+    #print time.ctime(), \
+    #    "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
+    #    "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
+    #    message
+    pass
 
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
@@ -53,19 +47,14 @@ def find_modes(data, threshold=5, window=0):
         pairs for every mode greater than or equal to threshold.
         Only local maxima in counts are returned.
     """
-    vals = np.unique(data)
-    #counts = [len([x for x in data if abs(x-val) <= window]) for val in vals]
-    #counts = np.array([np.sum(np.abs(data - val) <= window) for val in vals])
-    counts = np.sum(np.abs(np.subtract.outer(vals, data)) <= window, axis=1)
-    # Put them into an actual vector
-    minval = min(vals)
-    fullvector = np.zeros(max(vals-minval)+1)
-    fullvector[vals-minval] = counts
+    # TODO: Ignores window at present
+    datamin = np.amin(data)
+    fullvector = np.bincount(data - datamin)
     # Find local maxima
-    localmaxes = np.nonzero(locmax(fullvector) &
-                            (fullvector >= threshold))[0].tolist()
-    return [(localmax+minval, fullvector[localmax]) for localmax in localmaxes]
-
+    localmaxes = np.nonzero(np.logical_and(locmax(fullvector),
+                                           np.greater_equal(fullvector,
+                                                            threshold)))[0]
+    return localmaxes + datamin, fullvector[localmaxes]
 
 class Matcher(object):
     """Provide matching for audfprint fingerprint queries to hash table"""
@@ -86,6 +75,8 @@ class Matcher(object):
         self.verbose = False
         # Do illustration?
         self.illustrate = False
+        # Careful counts?
+        self.exact_count = False
 
     def match_hashes(self, ht, hashes, hashesfor=None):
         """ Match audio against fingerprint hash table.
@@ -94,9 +85,9 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        #log("nhashes=%d" % np.shape(hashes)[0])
+        log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
-        #log("nhits=%d" % np.shape(hits)[0])
+        log("nhits=%d" % np.shape(hits)[0])
         ## Sorted list of all the track ids that got hits
         #idlist = np.r_[-1, sorted([id for id, time, hash, otime in hits]), -1]
         ## Counts of unique entries in the sorted list
@@ -123,48 +114,66 @@ class Matcher(object):
         #counts = np.sum(np.equal.outer(ids, allids), axis=1)
         # much faster, and doesn't explode memory
         counts = np.bincount(allids)[ids]
-        #log("max(counts)=%d" % np.amax(counts))
+        log("max(counts)=%d" % np.amax(counts))
 
         # Find all the actual hits for a the most popular ids
         bestcountsids = sorted(zip(counts, ids), reverse=True)
+        maxdepth = np.minimum(np.count_nonzero(np.greater(counts, self.threshcount)), self.search_depth)
         # Try the top N results
         results = []
-        for rawcount, tid in bestcountsids[:self.search_depth]:
-            #modescounts = find_modes([time for (id, time, hash, otime) in hits
-            #                          if id == tid],
-            #                          window=window, threshold=threshcount)
-            modescounts = find_modes(alltimes[np.nonzero(allids == tid)[0]],
-                                     window=self.window,
-                                     threshold=self.threshcount)
-            for (mode, filtcount) in modescounts:
-                #matchhashes = [((otime), hash)
-                #               for (id, time, hash, otime) in hits
-                #               if id == tid and abs(time - mode) <= window]
-                ## matchhashes may include repeats because multiple
-                ## ref hashes may match a single query hash under window.
-                ## Uniqify:
-                #matchhashes = sorted(list(set(matchhashes)))
-                matchix = np.nonzero((allids == tid) &
-                                     (np.abs(alltimes-mode) <= self.window))[0]
-                matchhasheshash = np.unique(allotimes[matchix]
-                                            + maxotime*allhashes[matchix])
-                matchhashes = [(hash_ % maxotime, hash_ / maxotime)
-                               for hash_ in matchhasheshash]
-                # much, much faster
-                filtcount = len(matchhashes)
-                results.append((tid, filtcount, mode, rawcount, matchhashes))
+        if not self.exact_count:
+            mintime = np.amin(alltimes)
+            alltimes -= mintime
+            for rawcount, tid in bestcountsids[:maxdepth]:
+                tidtimes = alltimes[allids==tid]
+                if np.amax(np.bincount(tidtimes)) <= self.threshcount:
+                    continue
+                #mode, count = stats.mode(tidtimes)
+                #mode = int(mode[0])
+                modes, counts = find_modes(tidtimes, self.threshcount)
+                if len(modes):
+                    mode = modes[np.nonzero(np.equal(counts,
+                                                     np.amax(counts)))[0][0]]
+                    count = np.count_nonzero(np.less_equal(
+                        np.abs(tidtimes - mode), self.window))
+                    log("tid %d raw %d count %d" % (tid, rawcount, count))
+                    if count > self.threshcount:
+                        results.append((tid, count, mode+mintime, rawcount))
+                        if count > rawcount/4:
+                            break
+        else:
+            for rawcount, tid in bestcountsids[:maxdepth]:
+                modes, counts = find_modes(alltimes[np.nonzero(allids == tid)[0]],
+                                           window=self.window,
+                                           threshold=self.threshcount)
+                for (mode, filtcount) in zip(modes, counts):
+                    # matchhashes may include repeats because multiple
+                    # ref hashes may match a single query hash under window.
+                    # Uniqify:
+                    #matchhashes = sorted(list(set(matchhashes)))
+                    matchix = np.nonzero((allids == tid) &
+                                         (np.abs(alltimes-mode) <= self.window))[0]
+                    matchhasheshash = np.unique(allotimes[matchix]
+                                                + maxotime*allhashes[matchix])
+                    matchhashes = [(hash_ % maxotime, hash_ / maxotime)
+                                   for hash_ in matchhasheshash]
+                    # much, much faster
+                    filtcount = len(matchhashes)
+                    if filtcount >= self.threshcount:
+                        if hashesfor is not None:
+                            results.append((tid, filtcount, mode, rawcount, matchhashes))
+                        else:
+                            results.append((tid, filtcount, mode, rawcount))
 
         results = sorted(results, key=lambda x: x[1], reverse=True)
-        # Make sure again to return only those meeting threshcount (needed??)
-        shortresults = [(tid, filtcnt, mode, rawcount)
-                        for (tid, filtcnt, mode,
-                             rawcount, matchhashes) in results
-                        if filtcnt >= self.threshcount]
-
-        if hashesfor is not None:
-            return shortresults, results[hashesfor][4]
+        if hashesfor is None:
+            return results
         else:
-            return shortresults
+            hashesforhashes = results[hashesfor][4]
+            results = [(tid, filtcnt, mode, rawcount)
+                        for (tid, filtcnt, mode,
+                             rawcount, matchhashes) in results]
+            return results, results[hashesfor][4]
 
     def match_file(self, analyzer, ht, filename, number=None):
         """ Read in an audio file, calculate its landmarks, query against

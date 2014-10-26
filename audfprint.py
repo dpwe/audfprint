@@ -249,7 +249,7 @@ def setup_matcher(args):
     """Create a new matcher objects, set parameters from docopt structure"""
     matcher = audfprint_match.Matcher()
     matcher.window = int(args['--match-win'])
-    matcher.threshold = int(args['--min-count'])
+    matcher.threshcount = int(args['--min-count'])
     matcher.max_returns = int(args['--max-matches'])
     matcher.search_depth = int(args['--search-depth'])
     matcher.sort_by_time = args['--sortbytime']

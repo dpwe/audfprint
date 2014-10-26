@@ -46,8 +46,10 @@ else:
         resultFile = sys.argv[3]
 
 # Default params
-defaults = {'density': "70", 
-            'fanout': "8", 
+defaults = {'density': "70",
+            'fanout': "8",
+            'search_depth': "10000",
+            'min_count': "20",
             'ncores': "4"}
 
 # Parse input file
@@ -62,18 +64,24 @@ if config_file:
 
 density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')
+search_depth = config.getint(section, 'search_depth')
+min_count = config.getint(section, 'min_count')
 ncores = config.getint(section, 'ncores')
 
-print sys.argv[0], "density:", density, "fanout:", fanout, "ncores:", ncores
+print sys.argv[0], "density:", density, "fanout:", fanout, \
+    "search_depth", search_depth, "min_count", min_count, \
+    "ncores:", ncores
 
 # Run the command
-argv = ["audfprint", "match", 
-        "-d", os.path.join(dir4db, "data.fpdb"), 
-        "--density", str(density), 
+argv = ["audfprint", "match",
+        "-d", os.path.join(dir4db, "data.fpdb"),
+        "--density", str(density),
         "--fanout", str(fanout),
+        "--search-depth", str(search_depth),
+        "--min-count", str(min_count),
         "--ncores", str(ncores),
-        "--verbose", 0, 
-        "--opfile", resultFile, 
+        "--verbose", 0,
+        "--opfile", resultFile,
         "--list", fileList4query]
 
 # Run audfprint
