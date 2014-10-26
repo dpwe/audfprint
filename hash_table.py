@@ -12,6 +12,7 @@ import random
 import cPickle as pickle
 import os, gzip
 import scipy.io
+import math
 
 # Current format version
 HT_VERSION = 20140920
@@ -35,6 +36,8 @@ class HashTable(object):
         else:
             self.hashbits = hashbits
             self.depth = depth
+            if maxtime != 2**int(round(math.log(maxtime)/math.log(2))):
+                raise ValueError("maxtime must be a power of 2")
             self.maxtime = maxtime
             # allocate the big table
             size = 2**hashbits

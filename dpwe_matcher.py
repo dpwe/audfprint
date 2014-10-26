@@ -49,7 +49,7 @@ else:
 defaults = {'density': "70",
             'fanout': "8",
             'search_depth': "1000",
-            'min_count': "20",
+            'min_count': "10",
             'ncores': "4"}
 
 # Parse input file

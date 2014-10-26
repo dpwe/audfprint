@@ -253,6 +253,7 @@ def setup_matcher(args):
     matcher.max_returns = int(args['--max-matches'])
     matcher.search_depth = int(args['--search-depth'])
     matcher.sort_by_time = args['--sortbytime']
+    matcher.exact_count = args['--exact-count']
     matcher.illustrate = args['--illustrate']
     matcher.verbose = args['--verbose']
     return matcher
@@ -297,6 +298,7 @@ Options:
   -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 1]
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
+  -X, --exact-count               Flag to use more precise (but slower) match counting
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]

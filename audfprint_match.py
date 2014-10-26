@@ -18,12 +18,10 @@ from scipy import stats
 
 def log(message):
     """ log info with stats """
-    pass
-
-    #print time.ctime(), \
-    #    "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
-    #    "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
-    #    message
+    print time.ctime(), \
+        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
+        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
+        message
 
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
@@ -86,9 +84,9 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        log("nhashes=%d" % np.shape(hashes)[0])
+        #log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
-        log("nhits=%d" % np.shape(hits)[0])
+        #log("nhits=%d" % np.shape(hits)[0])
         allids = hits[:, 0]
         alltimes = hits[:, 1]
         allhashes = hits[:, 2]
@@ -100,16 +98,24 @@ class Matcher(object):
         #rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
         # much faster, and doesn't explode memory
         rawcounts = np.bincount(allids)[ids]
+        # Divide the raw counts by the total number of hashes stored
+        # for the ref track, to downweight large numbers of chance
+        # matches against longer reference tracks.
         wtdcounts = rawcounts/(ht.hashesperid[ids].astype(float))
-        log("max(rawcounts)=%d" % np.amax(rawcounts))
+        #log("max(rawcounts)=%d" % np.amax(rawcounts))
 
         # Find all the actual hits for a the most popular ids
         bestcountsixs = np.argsort(wtdcounts)[::-1]
-        maxdepth = np.minimum(np.count_nonzero(np.greater(rawcounts, self.threshcount)), self.search_depth)
-        # Try the top N results
+        # We will examine however many hits have rawcounts above threshold
+        # up to a maximum of search_depth.
+        maxdepth = np.minimum(np.count_nonzero(np.greater(rawcounts,
+                                                          self.threshcount)),
+                              self.search_depth)
         results = []
-        log("len(rawcounts)=%d max(bestcountsixs)=%d" % (len(rawcounts), max(bestcountsixs)))
+        #log("len(rawcounts)=%d max(bestcountsixs)=%d" %
+        #    (len(rawcounts), max(bestcountsixs)))
         if not self.exact_count:
+            # Make sure alltimes has no negative vals (so np.bincount is happy)
             mintime = np.amin(alltimes)
             alltimes -= mintime
             for ix in bestcountsixs[:maxdepth]:
@@ -119,22 +125,20 @@ class Matcher(object):
                 tidtimes = alltimes[allids==tid]
                 if np.amax(np.bincount(tidtimes)) <= self.threshcount:
                     continue
-                #mode, count = stats.mode(tidtimes)
-                #mode = int(mode[0])
                 modes, counts = find_modes(tidtimes, self.threshcount)
                 if len(modes):
                     mode = modes[np.nonzero(np.equal(counts,
                                                      np.amax(counts)))[0][0]]
                     count = np.count_nonzero(np.less_equal(
                         np.abs(tidtimes - mode), self.window))
-                    log("tid %d raw %d count %d" % (tid, rawcount, count))
-                    if count > self.threshcount:
-                        results.append((tid, count, mode+mintime, rawcount))
-                        if count > rawcount/4:
-                            break
+                    #log("tid %d raw %d count %d" % (tid, rawcount, count))
+                    results.append((tid, count, mode+mintime, rawcount))
         else:
-            for rawcount, tid in bestcountsids[:maxdepth]:
-                modes, counts = find_modes(alltimes[np.nonzero(allids == tid)[0]],
+            # Slower, old process for exact match counts
+            for ix  in bestcountsixs[:maxdepth]:
+                rawcount = rawcounts[ix]
+                tid = ids[ix]
+                modes, counts = find_modes(alltimes[np.nonzero(allids==tid)[0]],
                                            window=self.window,
                                            threshold=self.threshcount)
                 for (mode, filtcount) in zip(modes, counts):
@@ -143,7 +147,8 @@ class Matcher(object):
                     # Uniqify:
                     #matchhashes = sorted(list(set(matchhashes)))
                     matchix = np.nonzero((allids == tid) &
-                                         (np.abs(alltimes-mode) <= self.window))[0]
+                                         (np.abs(alltimes-mode) <=
+                                          self.window))[0]
                     matchhasheshash = np.unique(allotimes[matchix]
                                                 + maxotime*allhashes[matchix])
                     matchhashes = [(hash_ % maxotime, hash_ / maxotime)
