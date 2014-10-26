@@ -48,7 +48,7 @@ else:
 # Default params
 defaults = {'density': "70",
             'fanout': "8",
-            'search_depth': "10000",
+            'search_depth': "1000",
             'min_count': "20",
             'ncores': "4"}
 
