@@ -118,14 +118,21 @@ class HashTable(object):
         """ Return np.array of [id, delta_time, hash, time] rows
             associated with each element in hashes array of [time, hash] rows
         """
-        hits = np.zeros((0, 4), np.int32)
+        # Allocate to largest possible number of hits
+        hits = np.zeros((np.shape(hashes)[0]*self.depth, 4), np.int32)
+        nhits = 0
+        # Fill in
         for time_, hash_ in hashes:
             idstimes = self.get_entry(hash_)
-            hitsthishash = np.c_[idstimes[:,0], idstimes[:,1]-time_,
-                                 np.tile(np.array([hash_, time_])
-                                         .astype(np.int32),
-                                         (np.shape(idstimes)[0], 1))]
-            hits = np.r_[hits, hitsthishash]
+            nids = np.shape(idstimes)[0]
+            hitrows = nhits + np.arange(nids)
+            hits[hitrows, 0] = idstimes[:, 0]
+            hits[hitrows, 1] = idstimes[:, 1] - time_
+            hits[hitrows, 2] = hash_
+            hits[hitrows, 3] = time_
+            nhits += nids
+        # Discard the excess rows
+        hits.resize( (nhits, 4) )
         return hits
 
     def save(self, name, params=None):
