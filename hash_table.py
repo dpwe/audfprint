@@ -52,6 +52,14 @@ class HashTable(object):
             # Mark as unsaved
             self.dirty = True
 
+    def reset(self):
+        """ Reset to empty state (but preserve parameters) """
+        self.table[:,:] = 0
+        self.counts[:] = 0
+        self.names = []
+        self.hashesperid = []
+        self.dirty = True
+
     def store(self, name, timehashpairs):
         """ Store a list of hashes in the hash table
             associated with a particular name (or integer ID) and time.

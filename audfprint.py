@@ -93,14 +93,10 @@ def file_precompute(analyzer, filename, precompdir, type='peaks'):
     else:
         return file_precompute_hashes(analyzer, filename, precompdir)
 
-def make_ht_from_list(analyzer, filelist, proto_hash_tab, pipe=None):
+def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     """ Populate a hash table from a list, used as target for
         multiprocess division.  pipe is a pipe over which to push back
         the result, else return it """
-    # Clone HT params
-    hashbits = proto_hash_tab.hashbits
-    depth = proto_hash_tab.depth
-    maxtime = proto_hash_tab.maxtime
     # Create new ht instance
     ht = hash_table.HashTable(hashbits=hashbits, depth=depth, maxtime=maxtime)
     # Add in the files
@@ -172,7 +168,9 @@ def multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
         rx[ix], tx[ix] = multiprocessing.Pipe(False)
         pr[ix] = multiprocessing.Process(target=make_ht_from_list,
                                          args=(analyzer, filelists[ix],
-                                               hash_tab, tx[ix]))
+                                               hash_tab.hashbits,
+                                               hash_tab.depth,
+                                               hash_tab.maxtime, tx[ix]))
         pr[ix].start()
     # gather results when they all finish
     for core in range(ncores):
@@ -181,12 +179,8 @@ def multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
         report(["hash_table " + str(core) + " has "
                 + str(len(hash_tabx.names))
                 + " files " + str(sum(hash_tabx.counts)) + " hashes"])
-        if len(hash_tab.counts) == 0:
-            # Avoid merge into empty hash table, just keep the first one
-            hash_tab = hash_tabx
-        else:
-            # merge in all the new items, hash entries
-            hash_tab.merge(hash_tabx)
+        # merge in all the new items, hash entries
+        hash_tab.merge(hash_tabx)
         # finish that thread...
         pr[core].join()
 
