@@ -38,8 +38,9 @@ else:
         dir4db = sys.argv[2]
 
 # Default params
-defaults = {'density': "70", 
-            'fanout': "8", 
+defaults = {'density': "70",
+            'fanout': "8",
+            'bucketsize': "500",
             'ncores': "4"}
 
 # Parse input file
@@ -53,19 +54,22 @@ if config_file:
 
 density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')
+bucketsize = config.getint(section, 'bucketsize')
 ncores = config.getint(section, 'ncores')
 
-print sys.argv[0], "density:", density, "fanout:", fanout, "ncores:", ncores
+print sys.argv[0], "density:", density, "fanout:", fanout, \
+    "bucketsize:", bucketsize, "ncores:", ncores
 
 # Ensure the database directory exists
 audfprint.ensure_dir(dir4db)
 
 # Run the command
-argv = ["audfprint", "new", 
-        "-d", os.path.join(dir4db, "data.fpdb"), 
-        "--density", str(density), 
+argv = ["audfprint", "new",
+        "-d", os.path.join(dir4db, "data.fpdb"),
+        "--density", str(density),
         "--fanout", str(fanout),
-        "--ncores", str(ncores), 
+        "--bucketsize", str(bucketsize),
+        "--ncores", str(ncores),
         "--list", fileList4db]
 
 # Run audfprint
