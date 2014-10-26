@@ -41,7 +41,7 @@ else:
 defaults = {'density': "70",
             'fanout': "8",
             'bucketsize': "500",
-            'ncores': "4"}
+            'ncores': "8"}
 
 # Parse input file
 import ConfigParser

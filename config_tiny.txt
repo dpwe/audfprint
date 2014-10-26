@@ -8,11 +8,11 @@
 density: 20
 fanout: 3
 bucketsize: 100
-ncores: 4
+ncores: 8
 
 [dpwe_matcher]
 density: 20
 fanout: 3
-search_depth: 1000
+search_depth: 100
 min_count: 5
-ncores: 4
+ncores: 8

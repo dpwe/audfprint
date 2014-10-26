@@ -71,7 +71,7 @@ class HashTable(object):
             # lookup name or assign new
             if name not in self.names:
                 self.names.append(name)
-                self.hashesperid.append(0)
+                self.hashesperid = np.append(self.hashesperid, [0])
             id_ = self.names.index(name)
         else:
             # we were passed in a numerical id
@@ -209,8 +209,8 @@ class HashTable(object):
         params = {}
         params['mat_version'] = mht['HT_params'][0][0][-1][0][0]
         assert params['mat_version'] >= 0.9
-        self.hashbits = int(np.log(mht['HT_params'][0][0][0][0][0]) /
-                            np.log(2.0))
+        self.hashbits = int(round(np.log(mht['HT_params'][0][0][0][0][0]) /
+                                  np.log(2.0)))
         self.depth = mht['HT_params'][0][0][1][0][0]
         self.maxtime = mht['HT_params'][0][0][2][0][0]
         params['hoptime'] = mht['HT_params'][0][0][3][0][0]
@@ -227,7 +227,7 @@ class HashTable(object):
         # rewrite them all, we shift the corresponding decode tables
         # down one cell
         self.names.insert(0, '')
-        self.hashesperid = np.r_[[0], self.hashesperid]
+        self.hashesperid = np.append([0], self.hashesperid)
         # Otherwise unmodified database
         self.dirty = False
         return params
@@ -242,7 +242,7 @@ class HashTable(object):
         ncurrent = len(self.names)
         #size = len(self.counts)
         self.names += ht.names
-        self.hashesperid += ht.hashesperid
+        self.hashesperid = np.append(self.hashesperid, ht.hashesperid)
         # All the table values need to be increased by the ncurrent
         idoffset = self.maxtime * ncurrent
         for hash_ in np.nonzero(ht.counts)[0]:

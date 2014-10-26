@@ -48,9 +48,9 @@ else:
 # Default params
 defaults = {'density': "70",
             'fanout': "8",
-            'search_depth': "1000",
-            'min_count': "10",
-            'ncores': "4"}
+            'search_depth': "2000",
+            'min_count': "5",
+            'ncores': "8"}
 
 # Parse input file
 import ConfigParser
