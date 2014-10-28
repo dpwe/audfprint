@@ -60,7 +60,8 @@ section = 'dpwe_matcher'
 config.add_section(section)
 
 if config_file:
-    config.read(config_file)
+    if len(config.read(config_file)) == 0:
+        raise IOError(errno.ENOENT, "Cannot read config file", config_file)
 
 density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')

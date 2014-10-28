@@ -45,12 +45,14 @@ defaults = {'density': "70",
 
 # Parse input file
 import ConfigParser
+import errno
 config = ConfigParser.ConfigParser(defaults)
 section = 'dpwe_builder'
 config.add_section(section)
 
 if config_file:
-    config.read(config_file)
+    if len(config.read(config_file)) == 0:
+        raise IOError(errno.ENOENT, "Cannot read config file", config_file)
 
 density = config.getint(section, 'density')
 fanout = config.getint(section, 'fanout')
