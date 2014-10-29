@@ -157,9 +157,13 @@ class HashTable(object):
         with gzip.open(name, 'wb') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
+        nhashes = sum(self.counts)
         print "Saved fprints for", len(self.names), "files", \
-              "(", sum(self.counts), "hashes)", \
+              "(", nhashes, "hashes)", \
               "to", name
+        # Report the proportion of dropped hashes (overfull table)
+        dropped = nhashes - sum(np.minimum(self.depth, self.counts))
+        print "Dropped hashes=", dropped, "(%.2f%%)" % (100.0*dropped/nhashes)
 
     def load(self, name):
         """ Read either pklz or mat-format hash table file """
