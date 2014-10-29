@@ -403,6 +403,7 @@ def main(argv):
 
     # Save the hash table file if it has been modified
     if hash_tab and hash_tab.dirty:
+        ensure_dir(os.path.split(dbasename)[0])
         hash_tab.save(dbasename)
 
 
