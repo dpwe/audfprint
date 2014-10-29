@@ -345,12 +345,15 @@ def main(argv):
         if not dbasename:
             raise ValueError("dbase name must be provided if not precompute")
         if cmd == "new":
+            # Check that the output directory can be created before we start
+            ensure_dir(os.path.split(dbasename)[0])
             # Create a new hash table
             hash_tab = hash_table.HashTable(hashbits=int(args['--hashbits']),
                                             depth=int(args['--bucketsize']),
                                             maxtime=int(args['--maxtime']))
             # Set its samplerate param
             hash_tab.params['samplerate'] = analyzer.target_sr
+
         else:
             # Load existing hash table file (add, match, merge)
             hash_tab = hash_table.HashTable(dbasename)
@@ -403,7 +406,7 @@ def main(argv):
 
     # Save the hash table file if it has been modified
     if hash_tab and hash_tab.dirty:
-        ensure_dir(os.path.split(dbasename)[0])
+        # We already created the directory, if "new".
         hash_tab.save(dbasename)
 
 
