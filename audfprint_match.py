@@ -133,8 +133,6 @@ class Matcher(object):
                                         matchhashes))
                     else:
                         results.append((tid, filtcount, mode, rawcount))
-        # Exact counts may have changed order, re-sort
-        results = sorted(results, key=lambda x: x[1], reverse=True)
         return results
 
     def _approx_match_counts(self, hits, ids, rawcounts):
@@ -167,7 +165,6 @@ class Matcher(object):
         # find the implicated id, time pairs from hash table
         #log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
-        print hits
 
         bestids, rawcounts = self._best_count_ids(hits, ht)
 
@@ -178,6 +175,9 @@ class Matcher(object):
         else:
             results = self._exact_match_counts(hits, bestids, rawcounts,
                                                hashesfor)
+
+        # Sort results by filtered count
+        results = sorted(results, key=lambda x: x[1], reverse=True)
 
         if hashesfor is None:
             return results
