@@ -77,6 +77,87 @@ class Matcher(object):
         # Careful counts?
         self.exact_count = False
 
+    def _best_count_ids(self, hits, ht):
+        """ Return the indexes for the ids with the best counts.
+            hits is a matrix as returned by hash_table.get_hits()
+            with rows of consisting of [id dtime hash otime] """
+        allids = hits[:, 0]
+        ids = np.unique(allids)
+        #rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
+        # much faster, and doesn't explode memory
+        rawcounts = np.bincount(allids)[ids]
+        # Divide the raw counts by the total number of hashes stored
+        # for the ref track, to downweight large numbers of chance
+        # matches against longer reference tracks.
+        wtdcounts = rawcounts/(ht.hashesperid[ids].astype(float))
+
+        # Find all the actual hits for a the most popular ids
+        bestcountsixs = np.argsort(wtdcounts)[::-1]
+        # We will examine however many hits have rawcounts above threshold
+        # up to a maximum of search_depth.
+        maxdepth = np.minimum(np.count_nonzero(np.greater(rawcounts,
+                                                          self.threshcount)),
+                              self.search_depth)
+        # Return the ids to check
+        bestcountsixs = bestcountsixs[:maxdepth]
+        return ids[bestcountsixs], rawcounts[bestcountsixs]
+
+    def _exact_match_counts(self, hits, ids, rawcounts, hashesfor=None):
+        # Slower, old process for exact match counts
+        allids = hits[:, 0]
+        alltimes = hits[:, 1]
+        allotimes = hits[:, 3]
+        maxotime = np.max(maxotime)
+        for id, rawcount in zip(ids, rawcounts):
+            modes, counts = find_modes(alltimes[np.nonzero(allids==id)[0]],
+                                       window=self.window,
+                                       threshold=self.threshcount)
+            for mode in modes:
+                # matchhashes may include repeats because multiple
+                # ref hashes may match a single query hash under window.
+                # Uniqify:
+                #matchhashes = sorted(list(set(matchhashes)))
+                # much, much faster:
+                matchix = np.nonzero((allids == id) &
+                                     (np.abs(alltimes-mode) <=
+                                      self.window))[0]
+                matchhasheshash = np.unique(allotimes[matchix]
+                                            + maxotime*allhashes[matchix])
+                matchhashes = [(hash_ % maxotime, hash_ / maxotime)
+                               for hash_ in matchhasheshash]
+                # Now we get the exact count
+                filtcount = len(matchhashes)
+                if filtcount >= self.threshcount:
+                    if hashesfor is not None:
+                        results.append((tid, filtcount, mode, rawcount,
+                                        matchhashes))
+                    else:
+                        results.append((tid, filtcount, mode, rawcount))
+        # Exact counts may have changed order, re-sort
+        results = sorted(results, key=lambda x: x[1], reverse=True)
+        return results
+
+    def _approx_match_counts(self, hits, ids, rawcounts):
+        # Faster, not quite exact count of matching hashes
+        # Make sure alltimes has no negative vals (so np.bincount is happy)
+        allids = hits[:, 0]
+        alltimes = hits[:, 1]
+        mintime = np.amin(alltimes)
+        alltimes -= mintime
+        results = []
+        for id, rawcount in zip(ids, rawcounts):
+            idtimes = alltimes[allids==id]
+            bincounts = np.bincount(idtimes)
+            if np.amax(bincounts) <= self.threshcount:
+                # Too few - skip to the next id
+                continue
+            mode = np.argmax(bincounts)
+            count = np.count_nonzero(np.less_equal(
+                np.abs(idtimes - mode), self.window))
+            #log("tid %d raw %d count %d" % (tid, rawcount, count))
+            results.append((id, count, mode+mintime, rawcount))
+        return results
+
     def match_hashes(self, ht, hashes, hashesfor=None):
         """ Match audio against fingerprint hash table.
             Return top N matches as (id, filteredmatches, timoffs, rawmatches)
@@ -86,82 +167,18 @@ class Matcher(object):
         # find the implicated id, time pairs from hash table
         #log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
-        #log("nhits=%d" % np.shape(hits)[0])
-        allids = hits[:, 0]
-        alltimes = hits[:, 1]
-        allhashes = hits[:, 2]
-        allotimes = hits[:, 3]
+        print hits
 
-        maxotime = np.max(allotimes)
-        ids = np.unique(allids)
-        #log("nids=%d" % np.size(ids))
-        #rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
-        # much faster, and doesn't explode memory
-        rawcounts = np.bincount(allids)[ids]
-        # Divide the raw counts by the total number of hashes stored
-        # for the ref track, to downweight large numbers of chance
-        # matches against longer reference tracks.
-        wtdcounts = rawcounts/(ht.hashesperid[ids].astype(float))
-        #log("max(rawcounts)=%d" % np.amax(rawcounts))
+        bestids, rawcounts = self._best_count_ids(hits, ht)
 
-        # Find all the actual hits for a the most popular ids
-        bestcountsixs = np.argsort(wtdcounts)[::-1]
-        # We will examine however many hits have rawcounts above threshold
-        # up to a maximum of search_depth.
-        maxdepth = np.minimum(np.count_nonzero(np.greater(rawcounts,
-                                                          self.threshcount)),
-                              self.search_depth)
-        results = []
         #log("len(rawcounts)=%d max(bestcountsixs)=%d" %
         #    (len(rawcounts), max(bestcountsixs)))
         if not self.exact_count:
-            # Make sure alltimes has no negative vals (so np.bincount is happy)
-            mintime = np.amin(alltimes)
-            alltimes -= mintime
-            for ix in bestcountsixs[:maxdepth]:
-                #log("ix=%d"%ix)
-                rawcount = rawcounts[ix]
-                tid  = ids[ix]
-                tidtimes = alltimes[allids==tid]
-                if np.amax(np.bincount(tidtimes)) <= self.threshcount:
-                    continue
-                modes, counts = find_modes(tidtimes, self.threshcount)
-                if len(modes):
-                    mode = modes[np.nonzero(np.equal(counts,
-                                                     np.amax(counts)))[0][0]]
-                    count = np.count_nonzero(np.less_equal(
-                        np.abs(tidtimes - mode), self.window))
-                    #log("tid %d raw %d count %d" % (tid, rawcount, count))
-                    results.append((tid, count, mode+mintime, rawcount))
+            results = self._approx_match_counts(hits, bestids, rawcounts)
         else:
-            # Slower, old process for exact match counts
-            for ix  in bestcountsixs[:maxdepth]:
-                rawcount = rawcounts[ix]
-                tid = ids[ix]
-                modes, counts = find_modes(alltimes[np.nonzero(allids==tid)[0]],
-                                           window=self.window,
-                                           threshold=self.threshcount)
-                for (mode, filtcount) in zip(modes, counts):
-                    # matchhashes may include repeats because multiple
-                    # ref hashes may match a single query hash under window.
-                    # Uniqify:
-                    #matchhashes = sorted(list(set(matchhashes)))
-                    matchix = np.nonzero((allids == tid) &
-                                         (np.abs(alltimes-mode) <=
-                                          self.window))[0]
-                    matchhasheshash = np.unique(allotimes[matchix]
-                                                + maxotime*allhashes[matchix])
-                    matchhashes = [(hash_ % maxotime, hash_ / maxotime)
-                                   for hash_ in matchhasheshash]
-                    # much, much faster
-                    filtcount = len(matchhashes)
-                    if filtcount >= self.threshcount:
-                        if hashesfor is not None:
-                            results.append((tid, filtcount, mode, rawcount, matchhashes))
-                        else:
-                            results.append((tid, filtcount, mode, rawcount))
+            results = self._exact_match_counts(hits, bestids, rawcounts,
+                                               hashesfor)
 
-        results = sorted(results, key=lambda x: x[1], reverse=True)
         if hashesfor is None:
             return results
         else:

@@ -19,6 +19,16 @@ HT_VERSION = 20140920
 # Earliest acceptable version
 HT_COMPAT_VERSION = 20140920
 
+
+def _bitsfor(maxval):
+    """ Convert a maxval into a number of bits (left shift). 
+        Raises a ValueError if the maxval is not a power of 2. """
+    maxvalbits = int(round(math.log(maxval)/math.log(2)))
+    if maxval != (1 << maxvalbits):
+        raise ValueError("maxval must be a power of 2, not %d" % maxval)
+    return maxvalbits
+
+
 class HashTable(object):
     """
     Simple hash table for storing and retrieving fingerprint hashes.
@@ -36,9 +46,7 @@ class HashTable(object):
         else:
             self.hashbits = hashbits
             self.depth = depth
-            if maxtime != 2**int(round(math.log(maxtime)/math.log(2))):
-                raise ValueError("maxtime must be a power of 2")
-            self.maxtime = maxtime
+            self.maxtimebits = _bitsfor(maxtime)
             # allocate the big table
             size = 2**hashbits
             self.table = np.zeros((size, depth), dtype=np.uint32)
@@ -79,7 +87,8 @@ class HashTable(object):
         # Now insert the hashes
         hashmask = (1 << self.hashbits) - 1
         #mxtime = self.maxtime
-        timemask = self.maxtime - 1
+        maxtime = 1 << self.maxtimebits
+        timemask = maxtime - 1
         # Try sorting the pairs by hash value, for better locality in storing
         #sortedpairs = sorted(timehashpairs, key=lambda x:x[1])
         sortedpairs = timehashpairs
@@ -90,7 +99,7 @@ class HashTable(object):
         #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
         # Keep only the bottom part of the hash value
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
-        idval = id_ * self.maxtime
+        idval = id_ << self.maxtimebits
         for time_, hash_ in sortedpairs:
             # How many already stored for this hash?
             count = self.counts[hash_]
@@ -123,11 +132,13 @@ class HashTable(object):
             associate with the given hash as rows.
         """
         vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
-        return np.c_[vals / self.maxtime, vals % self.maxtime].astype(np.int32)
+        maxtimemask = (1 << self.matimebits) - 1
+        return np.c_[vals >> self.maxtimebits, vals & maxtimemask].astype(np.int32)
 
-    def get_hits(self, hashes):
+    def get_hits_orig(self, hashes):
         """ Return np.array of [id, delta_time, hash, time] rows
-            associated with each element in hashes array of [time, hash] rows
+            associated with each element in hashes array of [time, hash] rows.
+            This is the original version that actually calls get_entry().
         """
         # Allocate to largest possible number of hits
         hits = np.zeros((np.shape(hashes)[0]*self.depth, 4), np.int32)
@@ -139,6 +150,32 @@ class HashTable(object):
             hitrows = nhits + np.arange(nids)
             hits[hitrows, 0] = idstimes[:, 0]
             hits[hitrows, 1] = idstimes[:, 1] - time_
+            hits[hitrows, 2] = hash_
+            hits[hitrows, 3] = time_
+            nhits += nids
+        # Discard the excess rows
+        hits.resize( (nhits, 4) )
+        return hits
+
+    def get_hits(self, hashes):
+        """ Return np.array of [id, delta_time, hash, time] rows
+            associated with each element in hashes array of [time, hash] rows.
+            This version has get_entry() inlined, it's about 30% faster.
+        """
+        # Allocate to largest possible number of hits
+        nhashes = np.shape(hashes)[0]
+        hits = np.zeros((nhashes*self.depth, 4), np.int32)
+        nhits = 0
+        maxtimemask = (1 << self.maxtimebits) - 1
+        # Fill in
+        for ix in xrange(nhashes):
+            time_ = hashes[ix][0]
+            hash_ = hashes[ix][1]
+            nids = min(self.depth, self.counts[hash_])
+            tabvals = self.table[hash_, :nids]
+            hitrows = nhits + np.arange(nids)
+            hits[hitrows, 0] = tabvals >> self.maxtimebits
+            hits[hitrows, 1] = (tabvals & maxtimemask) - time_
             hits[hitrows, 2] = hash_
             hits[hitrows, 3] = time_
             nhits += nids
@@ -185,7 +222,10 @@ class HashTable(object):
         params = temp.params
         self.hashbits = temp.hashbits
         self.depth = temp.depth
-        self.maxtime = temp.maxtime
+        if hasattr(temp, 'maxtimebits'):
+            self.maxtimebits = temp.maxtimebits
+        else:
+            self.maxtimebits = _bitsfor(temp.maxtime)
         self.table = temp.table
         self.counts = temp.counts
         self.names = temp.names
@@ -213,10 +253,9 @@ class HashTable(object):
         params = {}
         params['mat_version'] = mht['HT_params'][0][0][-1][0][0]
         assert params['mat_version'] >= 0.9
-        self.hashbits = int(round(np.log(mht['HT_params'][0][0][0][0][0]) /
-                                  np.log(2.0)))
+        self.hashbits = _bitsfor(mht['HT_params'][0][0][0][0][0])
         self.depth = mht['HT_params'][0][0][1][0][0]
-        self.maxtime = mht['HT_params'][0][0][2][0][0]
+        self.maxtimebits = _bitsfor(mht['HT_params'][0][0][2][0][0])
         params['hoptime'] = mht['HT_params'][0][0][3][0][0]
         params['targetsr'] = mht['HT_params'][0][0][4][0][0]
         params['nojenkins'] = mht['HT_params'][0][0][5][0][0]
@@ -248,7 +287,7 @@ class HashTable(object):
         self.names += ht.names
         self.hashesperid = np.append(self.hashesperid, ht.hashesperid)
         # All the table values need to be increased by the ncurrent
-        idoffset = self.maxtime * ncurrent
+        idoffset = (1 << self.maxtimebits) * ncurrent
         for hash_ in np.nonzero(ht.counts)[0]:
             if self.counts[hash_] + ht.counts[hash_] <= self.depth:
                 self.table[hash_,
