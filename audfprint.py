@@ -126,8 +126,8 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
 
     elif cmd == 'match':
         # Running query, single-core mode
-        for filename in filename_iter:
-            msgs = matcher.file_match_to_msgs(analyzer, hash_tab, filename)
+        for num, filename in enumerate(filename_iter):
+            msgs = matcher.file_match_to_msgs(analyzer, hash_tab, filename, num)
             report(msgs)
 
     elif cmd == 'new' or cmd == 'add':
@@ -170,7 +170,8 @@ def multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
                                          args=(analyzer, filelists[ix],
                                                hash_tab.hashbits,
                                                hash_tab.depth,
-                                               hash_tab.maxtime, tx[ix]))
+                                               (1<<hash_tab.maxtimebits),
+                                               tx[ix]))
         pr[ix].start()
     # gather results when they all finish
     for core in range(ncores):
@@ -253,7 +254,7 @@ def setup_matcher(args):
     matcher.max_returns = int(args['--max-matches'])
     matcher.search_depth = int(args['--search-depth'])
     matcher.sort_by_time = args['--sortbytime']
-    matcher.exact_count = args['--exact-count']
+    matcher.exact_count = args['--exact-count'] | args['--illustrate']
     matcher.illustrate = args['--illustrate']
     matcher.verbose = args['--verbose']
     return matcher
