@@ -333,6 +333,12 @@ def main(argv):
     # The actual command as a str
     cmd = cmdlist[0]
 
+    # Setup output function
+    report = setup_reporter(args)
+
+    # Keep track of wall time
+    initticks = time.clock()
+
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if cmd is not "merge" else None
 
@@ -357,6 +363,7 @@ def main(argv):
 
         else:
             # Load existing hash table file (add, match, merge)
+            report([time.ctime() + " Reading hash table " + dbasename])
             hash_tab = hash_table.HashTable(dbasename)
             if analyzer and 'samplerate' in hash_tab.params \
                    and hash_tab.params['samplerate'] != analyzer.target_sr:
@@ -369,12 +376,6 @@ def main(argv):
         hash_tab = None
         if args['--precompute-peaks']:
             precomp_type = 'peaks'
-
-    # Setup output function
-    report = setup_reporter(args)
-
-    # Keep track of wall time
-    initticks = time.clock()
 
     # Create a matcher
     matcher = setup_matcher(args) if cmd == 'match' else None

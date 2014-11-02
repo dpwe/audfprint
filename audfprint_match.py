@@ -172,6 +172,10 @@ class Matcher(object):
             number of time-aligned hits from the raw iist of hits.
             Only considers largest mode for reference ID match.
             Returns rows [id, filt_count, time_skew, raw_count, orig_rank] """
+        # In fact, the counts should be the same as exact_match_counts
+        # *but* some matches may be pruned because we don't bother to
+        # apply the window (allowable drift in time alignment) unless
+        # there are more than threshcount matches at the single best time skew.
         allids = hits[:, 0]
         alltimes = hits[:, 1]
         # Make sure every value in alltimes is >=0 for bincount
