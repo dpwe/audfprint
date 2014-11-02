@@ -228,7 +228,7 @@ class Matcher(object):
         # Could use to collect stats on best search-depth to use...
 
         # Now strip the final column (original raw-count-based rank)
-        results = results[:, :4]
+        #results = results[:, :4]
 
         if hashesfor is None:
             return results
@@ -262,8 +262,8 @@ class Matcher(object):
         rslts = self.match_hashes(ht, q_hashes)
         # Post filtering
         if self.sort_by_time:
-            rslts = sorted(rslts, key=lambda x: -x[2])
-        return (rslts[:self.max_returns], durd, len(q_hashes))
+            rslts = rslts[(-rslts[:, 2]).argsort(), :]
+        return (rslts[:self.max_returns, :], durd, len(q_hashes))
 
     def file_match_to_msgs(self, analyzer, ht, qry, number=None):
         """ Perform a match on a single input file, return list
@@ -284,15 +284,16 @@ class Matcher(object):
             else:
                 msgrslt.append(qrymsg+"\t")
         else:
-            for (tophitid, nhashaligned, bestaligntime, nhashraw) in rslts:
+            for (tophitid, nhashaligned, aligntime, nhashraw, rank) in rslts:
                 # figure the number of raw and aligned matches for top hit
                 if self.verbose:
                     msgrslt.append("Matched " + qrymsg + " as "
                                    + ht.names[tophitid] \
-                                   + (" at %.3f " % (bestaligntime*t_hop))
+                                   + (" at %.3f " % (aligntime*t_hop))
                                    + "s " \
                                    + "with " + str(nhashaligned) \
-                                   + " of " + str(nhashraw) + " hashes")
+                                   + " of " + str(nhashraw) + " hashes" \
+                                   + " at rank " + str(rank))
                 else:
                     msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
                 if self.illustrate:
