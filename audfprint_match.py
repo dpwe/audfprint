@@ -23,6 +23,10 @@ def log(message):
         "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
         message
 
+def encpowerof2(val):
+    """ Return N s.t. 2^N >= val """
+    return int(np.ceil(np.log(val)/np.log(2)))
+
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
         End points are peaks if larger than single neighbors.
@@ -102,23 +106,28 @@ class Matcher(object):
         bestcountsixs = bestcountsixs[:maxdepth]
         return ids[bestcountsixs], rawcounts[bestcountsixs]
 
-    def _unique_match_hashes(self, id, allids, alltimes, allotimes, allhashes,
-                             mode, maxotime):
+    def _unique_match_hashes(self, id, hits, mode):
         """ Return the list of unique matching hashes.  Split out so
             we can recover the actual matching hashes for the best
             match if required. """
+        allids = hits[:, 0]
+        alltimes = hits[:, 1]
+        allhashes = hits[:, 2]
+        allotimes = hits[:, 3]
+        timebits = encpowerof2(np.amax(allotimes))
         # matchhashes may include repeats because multiple
         # ref hashes may match a single query hash under window.
         # Uniqify:
         #matchhashes = sorted(list(set(matchhashes)))
         # much, much faster:
-        matchix = np.nonzero((allids == id) &
-                             (np.abs(alltimes-mode) <=
-                              self.window))[0]
+        matchix = np.nonzero(
+            np.logical_and(allids == id, np.less_equal(np.abs(alltimes - mode),
+                                                       self.window)))[0]
         matchhasheshash = np.unique(allotimes[matchix]
-                                    + maxotime*allhashes[matchix])
-        matchhashes = [(hash_ % maxotime, hash_ / maxotime)
-                       for hash_ in matchhasheshash]
+                                    + (allhashes[matchix] << timebits))
+        timemask = (1 << timebits) - 1
+        matchhashes = np.c_[matchhasheshash & timemask,
+                            matchhasheshash >> timebits]
         return matchhashes
 
     def _exact_match_counts(self, hits, ids, rawcounts, hashesfor=None):
@@ -145,9 +154,7 @@ class Matcher(object):
                                        window=self.window,
                                        threshold=self.threshcount)
             for mode in modes:
-                matchhashes = self._unique_match_hashes(id, allids, alltimes,
-                                                        allotimes, allhashes,
-                                                        mode, maxotime)
+                matchhashes = self._unique_match_hashes(id, hits, mode)
                 # Now we get the exact count
                 filtcount = len(matchhashes)
                 if filtcount >= self.threshcount:
@@ -173,7 +180,7 @@ class Matcher(object):
         results = np.zeros((len(ids), 5), np.int32)
         nresults = 0
         # Hash IDs and times together, so only a single bincount
-        timebits = int(np.ceil(np.log(np.amax(alltimes))/np.log(2)))
+        timebits = encpowerof2(np.amax(alltimes))
         allbincounts = np.bincount((allids << timebits) + alltimes)
         for urank, id, rawcount in zip(range(len(ids)), ids, rawcounts):
             # Select the subrange of bincounts corresponding to this id
@@ -224,11 +231,7 @@ class Matcher(object):
         else:
             id = results[hashesfor, 0]
             mode = results[hashesfor, 2]
-            hashesforhashes = self._unique_match_hashes(id,
-                                                        hits[:, 0], hits[:, 1],
-                                                        hits[:, 3], hits[:, 2],
-                                                        mode,
-                                                        np.max(hits[:, 3]))
+            hashesforhashes = self._unique_match_hashes(id, hits, mode)
             return results, hashesforhashes
 
     def match_file(self, analyzer, ht, filename, number=None):
