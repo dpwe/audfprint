@@ -176,12 +176,15 @@ class Matcher(object):
         # *but* some matches may be pruned because we don't bother to
         # apply the window (allowable drift in time alignment) unless
         # there are more than threshcount matches at the single best time skew.
+        results = np.zeros((len(ids), 5), np.int32)
+        if not hits.size:
+            # No hits found, return empty results
+            return results
         allids = hits[:, 0]
         alltimes = hits[:, 1]
         # Make sure every value in alltimes is >=0 for bincount
         mintime = np.amin(alltimes)
         alltimes -= mintime
-        results = np.zeros((len(ids), 5), np.int32)
         nresults = 0
         # Hash IDs and times together, so only a single bincount
         timebits = encpowerof2(np.amax(alltimes))
