@@ -254,8 +254,9 @@ def setup_matcher(args):
     matcher.max_returns = int(args['--max-matches'])
     matcher.search_depth = int(args['--search-depth'])
     matcher.sort_by_time = args['--sortbytime']
-    matcher.exact_count = args['--exact-count'] | args['--illustrate']
-    matcher.illustrate = args['--illustrate']
+    matcher.exact_count = args['--exact-count'] | args['--illustrate'] | args['--illustrate-hpf']
+    matcher.illustrate = args['--illustrate'] | args['--illustrate-hpf']
+    matcher.illustrate_hpf = args['--illustrate-hpf']
     matcher.verbose = args['--verbose']
     return matcher
 
@@ -311,6 +312,7 @@ Options:
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
   -I, --illustrate                Make a plot showing the match
+  -J, --illustrate-hpf            Plot the match, using onset enhancement
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
   --version                       Report version number
   --help                          Print this message

@@ -7,6 +7,8 @@ Fingerprint matching code for audfprint
 """
 import librosa
 import numpy as np
+import scipy.signal
+
 import time
 # for checking phys mem size
 import resource
@@ -312,8 +314,17 @@ class Matcher(object):
                                     hop_length=analyzer.n_hop,
                                     window=np.hanning(analyzer.n_fft+2)[1:-1]))
         sgram = 20.0*np.log10(np.maximum(sgram, np.max(sgram)/1e6))
+        sgram = sgram - np.mean(sgram)
+        # High-pass filter onset emphasis
+        # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
+        # spectrogram enhancement
+        if self.illustrate_hpf:
+            HPF_POLE = 0.98
+            sgram = np.array([scipy.signal.lfilter([1, -1],
+                                                   [1, -HPF_POLE], s_row)
+                              for s_row in sgram])[:-1,]
         sgram = sgram - np.max(sgram)
-        librosa.display.specshow(sgram, sr=sr,
+        librosa.display.specshow(sgram, sr=sr, hop_length=analyzer.n_hop,
                                  y_axis='linear', x_axis='time',
                                  cmap='gray_r', vmin=-80.0, vmax=0)
         # Do the match?
