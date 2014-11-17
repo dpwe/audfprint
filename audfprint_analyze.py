@@ -95,7 +95,7 @@ def hashes2landmarks(hashes):
         bin1 = (hash_ >> B1_SHIFT) & B1_MASK
         dbin = (hash_ >> DF_SHIFT) & DF_MASK
         # Sign extend frequency difference
-        if dbin > (1 << (DF_BITS-1)):
+        if dbin >= (1 << (DF_BITS-1)):
             dbin -= (1 << DF_BITS)
         landmarks.append((time_, bin1, bin1+dbin, dtime))
     return landmarks

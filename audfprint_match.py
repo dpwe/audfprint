@@ -114,7 +114,7 @@ class Matcher(object):
             match if required. """
         allids = hits[:, 0]
         alltimes = hits[:, 1]
-        allhashes = hits[:, 2]
+        allhashes = hits[:, 2].astype(np.int64)
         allotimes = hits[:, 3]
         timebits = encpowerof2(np.amax(allotimes))
         # matchhashes may include repeats because multiple
