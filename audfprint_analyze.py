@@ -259,6 +259,9 @@ class Analyzer(object):
             n_hop/sr secs), second is the FFT bin (in units of sr/n_fft
             Hz).
         """
+        if len(d) == 0:
+            return []
+
         # masking envelope decay constant
         a_dec = (1.0 - 0.01*(self.density*np.sqrt(self.n_hop/352.8)/35.0)) \
                 **(1.0/OVERSAMP)
@@ -272,7 +275,7 @@ class Analyzer(object):
             sgram = np.log(np.maximum(sgram, np.max(sgram)/1e6))
             sgram = sgram - np.mean(sgram)
         else:
-            # The sgram is identically zero, i.e., the input signal was identically 
+            # The sgram is identically zero, i.e., the input signal was identically
             # zero.  Not good, but let's let it through for now.
             print "find_peaks: Warning: input signal is identically zero."
         # High-pass filter onset emphasis
