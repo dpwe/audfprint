@@ -22,6 +22,7 @@ import time
 import hash_table
 
 import librosa
+import audioread # for NoBackendError
 
 ################ Globals ################
 # Special extension indicating precomputed fingerprint
@@ -266,8 +267,14 @@ class Analyzer(object):
         sgram = np.abs(librosa.stft(d, n_fft=self.n_fft,
                                     hop_length=self.n_hop,
                                     window=mywin))
-        sgram = np.log(np.maximum(sgram, np.max(sgram)/1e6))
-        sgram = sgram - np.mean(sgram)
+        sgrammax = np.max(sgram)
+        if sgrammax > 0.0:
+            sgram = np.log(np.maximum(sgram, np.max(sgram)/1e6))
+            sgram = sgram - np.mean(sgram)
+        else:
+            # The sgram is identically zero, i.e., the input signal was identically 
+            # zero.  Not good, but let's let it through for now.
+            print "find_peaks: Warning: input signal is identically zero."
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
         sgram = np.array([scipy.signal.lfilter([1, -1],
@@ -296,29 +303,30 @@ class Analyzer(object):
             Return a list of (col, peak, peak2, col2-col) landmark descriptors.
         """
         # Form pairs of peaks into landmarks
-        # Find column of the final peak in the list
-        scols = pklist[-1][0] + 1
-        # Convert (col, bin) list into peaks_at[col] lists
-        peaks_at = [[] for col in xrange(scols)]
-        for (col, bin) in pklist:
-            peaks_at[col].append(bin)
-
-        # Build list of landmarks <starttime F1 endtime F2>
         landmarks = []
-        for col in xrange(scols):
-            for peak in peaks_at[col]:
-                pairsthispeak = 0
-                for col2 in xrange(col+self.mindt,
-                                   min(scols, col+self.targetdt)):
-                    if pairsthispeak < self.maxpairsperpeak:
-                        for peak2 in peaks_at[col2]:
-                            if abs(peak2-peak) < self.targetdf:
-                                #and abs(peak2-peak) + abs(col2-col) > 2 ):
-                                if pairsthispeak < self.maxpairsperpeak:
-                                    # We have a pair!
-                                    landmarks.append((col, peak,
-                                                      peak2, col2-col))
-                                    pairsthispeak += 1
+        if len(pklist) > 0:
+            # Find column of the final peak in the list
+            scols = pklist[-1][0] + 1
+            # Convert (col, bin) list into peaks_at[col] lists
+            peaks_at = [[] for col in xrange(scols)]
+            for (col, bin) in pklist:
+                peaks_at[col].append(bin)
+
+            # Build list of landmarks <starttime F1 endtime F2>
+            for col in xrange(scols):
+                for peak in peaks_at[col]:
+                    pairsthispeak = 0
+                    for col2 in xrange(col+self.mindt,
+                                       min(scols, col+self.targetdt)):
+                        if pairsthispeak < self.maxpairsperpeak:
+                            for peak2 in peaks_at[col2]:
+                                if abs(peak2-peak) < self.targetdf:
+                                    #and abs(peak2-peak) + abs(col2-col) > 2 ):
+                                    if pairsthispeak < self.maxpairsperpeak:
+                                        # We have a pair!
+                                        landmarks.append((col, peak,
+                                                          peak2, col2-col))
+                                        pairsthispeak += 1
 
         return landmarks
 
@@ -333,7 +341,12 @@ class Analyzer(object):
             peaks = peaks_load(filename)
             dur = np.max(peaklists[0], axis=0)[0]*self.n_hop/float(self.target_sr)
         else:
-            [d, sr] = librosa.load(filename, sr=self.target_sr)
+            try:
+                [d, sr] = librosa.load(filename, sr=self.target_sr)
+            except audioread.NoBackendError:
+                print "wavfile2peaks: Error: Unable to find a backend for", filename
+                d = []
+                sr = self.target_sr
             # Store duration in a global because it's hard to handle
             dur = float(len(d))/sr
             if shifts is None or shifts < 2:
