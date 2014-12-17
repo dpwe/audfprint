@@ -27,7 +27,7 @@ def log(message):
 
 def encpowerof2(val):
     """ Return N s.t. 2^N >= val """
-    return int(np.ceil(np.log(val)/np.log(2)))
+    return int(np.ceil(np.log(max(1, val))/np.log(2)))
 
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
@@ -116,7 +116,7 @@ class Matcher(object):
         alltimes = hits[:, 1]
         allhashes = hits[:, 2].astype(np.int64)
         allotimes = hits[:, 3]
-        timebits = encpowerof2(np.amax(allotimes))
+        timebits = max(1, encpowerof2(np.amax(allotimes)))
         # matchhashes may include repeats because multiple
         # ref hashes may match a single query hash under window.
         # Uniqify:
@@ -189,7 +189,7 @@ class Matcher(object):
         alltimes -= mintime
         nresults = 0
         # Hash IDs and times together, so only a single bincount
-        timebits = encpowerof2(np.amax(alltimes))
+        timebits = max(1, encpowerof2(np.amax(alltimes)))
         allbincounts = np.bincount((allids << timebits) + alltimes)
         for urank, id, rawcount in zip(range(len(ids)), ids, rawcounts):
             # Select the subrange of bincounts corresponding to this id

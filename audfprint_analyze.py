@@ -342,7 +342,7 @@ class Analyzer(object):
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
-            dur = np.max(peaklists[0], axis=0)[0]*self.n_hop/float(self.target_sr)
+            dur = np.max(peaks, axis=0)[0]*self.n_hop/float(self.target_sr)
         else:
             try:
                 [d, sr] = librosa.load(filename, sr=self.target_sr)
@@ -384,7 +384,8 @@ class Analyzer(object):
             self.soundfilecount += 1
         else:
             peaks = self.wavfile2peaks(filename, self.shifts)
-            if self.shifts and self.shifts > 1:
+            # Did we get returned a list of lists of peaks due to shift?
+            if isinstance(peaks[0], list):
                 peaklists = peaks
                 query_hashes = []
                 for peaklist in peaklists:

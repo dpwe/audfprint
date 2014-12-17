@@ -5,7 +5,7 @@
 #
 # 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 
-test: test_onecore test_onecore_precomp test_mucore test_mucore_precomp
+test: test_onecore test_onecore_precomp test_onecore_precomppk test_mucore test_mucore_precomp
 	rm -rf precompdir precompdir_mu
 	rm -f fpdbase*.pklz
 
@@ -27,6 +27,19 @@ precompdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
 	mkdir precompdir
 	python audfprint.py precompute --precompdir precompdir Nine_Lives/*.mp3
 	python audfprint.py precompute --precompdir precompdir --shifts 4 query.mp3
+
+test_onecore_precomppk: precomppkdir
+	python audfprint.py new --dbase fpdbase0.pklz precomppkdir/Nine_Lives/0*
+	python audfprint.py new --dbase fpdbase.pklz precomppkdir/Nine_Lives/1*
+	python audfprint.py merge --dbase fpdbase.pklz fpdbase0.pklz
+	python audfprint.py match --dbase fpdbase.pklz precomppkdir/query.afpk
+	rm -rf precomppkdir
+
+precomppkdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
+	rm -rf precomppkdir
+	mkdir precomppkdir
+	python audfprint.py precompute --precompute-peaks --precompdir precomppkdir Nine_Lives/*.mp3
+	python audfprint.py precompute --precompute-peaks --precompdir precomppkdir --shifts 4 query.mp3
 
 test_mucore: fpdbase_mu.pklz
 	python audfprint.py match --dbase fpdbase_mu.pklz --ncores 4 query.mp3
