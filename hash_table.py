@@ -21,7 +21,7 @@ HT_COMPAT_VERSION = 20140920
 
 
 def _bitsfor(maxval):
-    """ Convert a maxval into a number of bits (left shift). 
+    """ Convert a maxval into a number of bits (left shift).
         Raises a ValueError if the maxval is not a power of 2. """
     maxvalbits = int(round(math.log(maxval)/math.log(2)))
     if maxval != (1 << maxvalbits):
@@ -282,6 +282,8 @@ class HashTable(object):
     def merge(self, ht):
         """ Merge in the results from another hash table """
         # All the items go into our table, offset by our current size
+        # Check compatibility
+        assert self.maxtimebits == ht.maxtimebits
         ncurrent = len(self.names)
         #size = len(self.counts)
         self.names += ht.names
@@ -289,16 +291,24 @@ class HashTable(object):
         # All the table values need to be increased by the ncurrent
         idoffset = (1 << self.maxtimebits) * ncurrent
         for hash_ in np.nonzero(ht.counts)[0]:
-            if self.counts[hash_] + ht.counts[hash_] <= self.depth:
-                self.table[hash_,
-                           self.counts[hash_]:(self.counts[hash_]
-                                               + ht.counts[hash_])] \
-                    = ht.table[hash_, :ht.counts[hash_]] + idoffset
+            allvals = np.r_[self.table[hash_, :self.counts[hash_]],
+                            ht.table[hash_, :ht.counts[hash_]] + idoffset]
+            # ht.counts[hash_] may be more than the actual number of
+            # hashes we obtained, if ht.counts[hash_] > ht.depth.
+            # Subselect based on actual size.
+            if len(allvals) > self.depth:
+                # Our hash bin is filled: randomly subselect the
+                # hashes, and update count to accurately track the
+                # total number of hashes we've seen for this bin.
+                somevals = np.random.permutation(allvals)[:self.depth]
+                self.table[hash_, ] = somevals
+                self.counts[hash_] += ht.counts[hash_]
             else:
-                # Need to subselect
-                allvals = np.r_[self.table[hash_, :self.counts[hash_]],
-                                ht.table[hash_, :ht.counts[hash_]]]
-                rperm = np.random.permutation(range(len(allvals)))
-                self.table[hash_,] = allvals[rperm[:self.depth]]
-            self.counts[hash_] += ht.counts[hash_]
+                # Our bin isn't full.  Store all the hashes, and
+                # accurately track how many values it contains.  This
+                # may mean some of the hashes counted for full buckets
+                # in ht are "forgotten" if ht.depth < self.depth.
+                self.table[hash_, :len(allvals)] = allvals
+                self.counts[hash_] = len(allvals)
+
         self.dirty = True

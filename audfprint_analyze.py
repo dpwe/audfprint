@@ -24,6 +24,8 @@ import hash_table
 import librosa
 import audioread # for NoBackendError
 
+import audio_read
+
 ################ Globals ################
 # Special extension indicating precomputed fingerprint
 PRECOMPEXT = '.afpt'
@@ -259,6 +261,9 @@ class Analyzer(object):
             n_hop/sr secs), second is the FFT bin (in units of sr/n_fft
             Hz).
         """
+        if len(d) == 0:
+            return []
+
         # masking envelope decay constant
         a_dec = (1.0 - 0.01*(self.density*np.sqrt(self.n_hop/352.8)/35.0)) \
                 **(1.0/OVERSAMP)
@@ -339,10 +344,11 @@ class Analyzer(object):
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
-            dur = np.max(peaklists[0], axis=0)[0]*self.n_hop/float(self.target_sr)
+            dur = np.max(peaks, axis=0)[0]*self.n_hop/float(self.target_sr)
         else:
             try:
-                [d, sr] = librosa.load(filename, sr=self.target_sr)
+                #[d, sr] = librosa.load(filename, sr=self.target_sr)
+                d, sr = audio_read.audio_read(filename, sr=self.target_sr)
             except audioread.NoBackendError:
                 print "wavfile2peaks: Error: Unable to find a backend for", filename
                 d = []
@@ -381,7 +387,8 @@ class Analyzer(object):
             self.soundfilecount += 1
         else:
             peaks = self.wavfile2peaks(filename, self.shifts)
-            if self.shifts and self.shifts > 1:
+            # Did we get returned a list of lists of peaks due to shift?
+            if isinstance(peaks[0], list):
                 peaklists = peaks
                 query_hashes = []
                 for peaklist in peaklists:
