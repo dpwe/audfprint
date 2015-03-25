@@ -277,7 +277,7 @@ class Analyzer(object):
             sgram = np.log(np.maximum(sgram, np.max(sgram)/1e6))
             sgram = sgram - np.mean(sgram)
         else:
-            # The sgram is identically zero, i.e., the input signal was identically 
+            # The sgram is identically zero, i.e., the input signal was identically
             # zero.  Not good, but let's let it through for now.
             print "find_peaks: Warning: input signal is identically zero."
         # High-pass filter onset emphasis
