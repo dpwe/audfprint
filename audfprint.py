@@ -303,7 +303,7 @@ Options:
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
-  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 1]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 2]
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting
@@ -377,9 +377,8 @@ def main(argv):
             hash_tab = hash_table.HashTable(dbasename)
             if analyzer and 'samplerate' in hash_tab.params \
                    and hash_tab.params['samplerate'] != analyzer.target_sr:
-                analyzer.target_sr = hash_tab.params['samplerate']
-                print("samplerate set to", analyzer.target_sr,
-                      "per", dbasename)
+                # analyzer.target_sr = hash_tab.params['samplerate']
+                print("db samplerate overridden to ", analyzer.target_sr)
     else:
         # The command IS precompute
         # dummy empty hash table

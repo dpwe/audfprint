@@ -178,6 +178,8 @@ class Matcher(object):
         # *but* some matches may be pruned because we don't bother to
         # apply the window (allowable drift in time alignment) unless
         # there are more than threshcount matches at the single best time skew.
+        # Note: now we allow multiple matches per ID, this may need to grow 
+        # so it can grow inside the loop.
         results = np.zeros((len(ids), 5), np.int32)
         if not hits.size:
             # No hits found, return empty results
@@ -194,14 +196,22 @@ class Matcher(object):
         for urank, id, rawcount in zip(range(len(ids)), ids, rawcounts):
             # Select the subrange of bincounts corresponding to this id
             bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
-            mode = np.argmax(bincounts)
-            if bincounts[mode] <= self.threshcount:
-                # Too few - skip to the next id
-                continue
-            count = np.sum(bincounts[max(0, mode-self.window) :
-                                     (mode+self.window+1)])
-            results[nresults, :] = [id, count, mode+mintime, rawcount, urank]
-            nresults += 1
+            still_looking = True
+            while still_looking:
+                mode = np.argmax(bincounts)
+                if bincounts[mode] <= self.threshcount:
+                    # Too few - skip to the next id
+                    still_looking = False
+                    continue
+                count = np.sum(bincounts[max(0, mode-self.window) :
+                                         (mode+self.window+1)])
+                results[nresults, :] = [id, count, mode+mintime, rawcount, urank]
+                nresults += 1
+                if nresults >= results.shape[0]:
+                    results = np.vstack([results, np.zeros(results.shape, 
+                                                           np.int32)])
+                # Clear this hit to find next largest.
+                bincounts[max(0, mode-self.window) : (mode+self.window+1)] = 0
         return results[:nresults, :]
 
     def match_hashes(self, ht, hashes, hashesfor=None):
