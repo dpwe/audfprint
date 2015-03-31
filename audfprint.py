@@ -27,17 +27,17 @@ import hash_table
 # Access to match functions, used in command line interface
 import audfprint_match
 
-def filenames(filelist, wavdir, listflag):
+def filename_list_iterator(filelist, wavdir, wavext, listflag):
     """ Iterator to yeild all the filenames, possibly interpreting them
         as list files, prepending wavdir """
     if not listflag:
         for filename in filelist:
-            yield os.path.join(wavdir, filename)
+            yield os.path.join(wavdir, filename + wavext)
     else:
         for listfilename in filelist:
             with open(listfilename, 'r') as f:
                 for filename in f:
-                    yield os.path.join(wavdir, filename.rstrip('\n'))
+                    yield os.path.join(wavdir, filename.rstrip('\n') + wavext)
 
 # for saving precomputed fprints
 def ensure_dir(dirname):
@@ -320,6 +320,7 @@ Options:
   -I, --illustrate                Make a plot showing the match
   -J, --illustrate-hpf            Plot the match, using onset enhancement
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
+  -V <ext>, --wavext <ext>        Extension to add to wav file names [default: ]
   --version                       Report version number
   --help                          Print this message
 """
@@ -390,9 +391,8 @@ def main(argv):
     # Create a matcher
     matcher = setup_matcher(args) if cmd == 'match' else None
 
-    filename_iter = filenames(args['<file>'],
-                              args['--wavdir'],
-                              args['--list'])
+    filename_iter = filename_list_iterator(
+        args['<file>'], args['--wavdir'], args['--wavext'], args['--list'])
 
     #######################
     # Run the main commmand
