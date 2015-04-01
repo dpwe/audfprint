@@ -89,6 +89,7 @@ def file_precompute_hashes(analyzer, filename, precompdir,
 def file_precompute(analyzer, filename, precompdir, type='peaks'):
     """ Perform precompute action for one file, return list
         of message strings """
+    print(time.ctime(), "precomputing", type, "for", filename, "...")
     if type == 'peaks':
         return file_precompute_peaks(analyzer, filename, precompdir)
     else:
