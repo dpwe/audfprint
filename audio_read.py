@@ -1,73 +1,68 @@
-#import librosa
+"""audio_read reads in a whole audio file with resampling."""
 
+# Equivalent to:
+#import librosa
 #def audio_read(filename, sr=11025, channels=1):
 #    """Read a soundfile, return (d, sr)."""
-#    d, sr = librosa.load(filename, sr=sr)
+#    d, sr = librosa.load(filename, sr=sr, mono=(channels == 1))
 #    return d, sr
 
+# The code below is adapted from:
+# https://github.com/bmcfee/librosa/blob/master/librosa/core/audio.py
+# This is its original copyright notice:
+
+# Copyright (c) 2014, Brian McFee, Matt McVicar, Dawen Liang, Colin Raffel, Douglas Repetto, Dan Ellis.
+#
+# Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 import os
 import numpy as np
 
-def audio_read(filename, sr=11025, channels=1):
+def audio_read(filename, sr=None, channels=None):
     """Read a soundfile, return (d, sr)."""
-    #d, sr = librosa.load(filename, sr=sr)
-    #return d, sr
     # Hacked version of librosa.load and audioread/ff.
-    mono = True
     offset = 0.0
     duration = None
     dtype = np.float32
     y = []
-    with FFmpegAudioFile(os.path.realpath(filename), sample_rate=sr, channels=channels) as input_file:
-        sr_native = sr
-
-        s_start = int(np.floor(sr_native * offset) * channels)
-
+    with FFmpegAudioFile(os.path.realpath(filename),
+                         sample_rate=sr, channels=channels) as input_file:
+        sr = input_file.sample_rate
+        channels = input_file.channels
+        s_start = int(np.floor(sr * offset) * channels)
         if duration is None:
             s_end = np.inf
         else:
-            s_end = s_start + int(np.ceil(sr_native * duration)
-                                  * channels)
-
-        n = 0
-
+            s_end = s_start + int(np.ceil(sr * duration) * channels)
+        num_read = 0
         for frame in input_file:
             frame = buf_to_float(frame, dtype=dtype)
-            n_prev = n
-            n = n + len(frame)
-
-            if n < s_start:
-                # offset is after the current frame
-                # keep reading
+            num_read_prev = num_read
+            num_read += len(frame)
+            if num_read < s_start:
+                # offset is after the current frame, keep reading.
                 continue
-
-            if s_end < n_prev:
+            if s_end < num_read_prev:
                 # we're off the end.  stop reading
                 break
-
-            if s_end < n:
+            if s_end < num_read:
                 # the end is in this frame.  crop.
-                frame = frame[:s_end - n_prev]
-
-            if n_prev <= s_start < n:
+                frame = frame[:s_end - num_read_prev]
+            if num_read_prev <= s_start < num_read:
                 # beginning is in this frame
-                frame = frame[(s_start - n_prev):]
-
+                frame = frame[(s_start - num_read_prev):]
             # tack on the current frame
             y.append(frame)
 
         if not len(y):
             # Zero-length read
             y = np.zeros(0, dtype=dtype)
-
         else:
             y = np.concatenate(y)
-
             if channels > 1:
                 y = y.reshape((-1, 2)).T
-
-            sr = sr_native
 
     # Final cleanup for dtype and contiguity
     y = np.ascontiguousarray(y, dtype=dtype)
@@ -102,6 +97,25 @@ def buf_to_float(x, n_bytes=2, dtype=np.float32):
     return scale * np.frombuffer(x, fmt).astype(dtype)
 
 
+# The code below is adapted from:
+# https://github.com/sampsyo/audioread/blob/master/audioread/ffdec.py
+# Below is its original copyright notice:
+
+# This file is part of audioread.
+# Copyright 2014, Adrian Sampson.
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+
+
 import subprocess
 import re
 import threading
@@ -110,7 +124,6 @@ try:
     import queue
 except ImportError:
     import Queue as queue
-
 
 
 class QueueReaderThread(threading.Thread):
@@ -135,12 +148,19 @@ class QueueReaderThread(threading.Thread):
                 break
 
 
-
 class FFmpegAudioFile(object):
     """An audio file decoded by the ffmpeg command-line utility."""
-    def __init__(self, filename, channels=1, sample_rate=11025, block_size=4096):
+    def __init__(self, filename, channels=None, sample_rate=None, block_size=4096):
+        popen_args = ['ffmpeg', '-i', filename, '-f', 's16le']
+        self.channels = channels
+        self.sample_rate = sample_rate
+        if channels:
+            popen_args.extend(['-ac', str(channels)])
+        if sample_rate:
+            popen_args.extend(['-ar', str(sample_rate)])
+        popen_args.append('-')
         self.proc = subprocess.Popen(
-            ['ffmpeg', '-i', filename, '-f', 's16le', '-ac', str(channels), '-ar', str(sample_rate), '-'],
+            popen_args,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
 
@@ -223,24 +243,28 @@ class FFmpegAudioFile(object):
         # Sample rate.
         match = re.search(r'(\d+) hz', s)
         if match:
-            self.samplerate = int(match.group(1))
+            self.sample_rate_orig = int(match.group(1))
         else:
-            self.samplerate = 0
+            self.sample_rate_orig = 0
+        if self.sample_rate is None:
+            self.sample_rate = self.sample_rate_orig
 
         # Channel count.
         match = re.search(r'hz, ([^,]+),', s)
         if match:
             mode = match.group(1)
             if mode == 'stereo':
-                self.channels = 2
+                self.channels_orig = 2
             else:
                 match = re.match(r'(\d+) ', mode)
                 if match:
-                    self.channels = int(match.group(1))
+                    self.channels_orig = int(match.group(1))
                 else:
-                    self.channels = 1
+                    self.channels_orig = 1
         else:
-            self.channels = 0
+            self.channels_orig = 0
+        if self.channels is None:
+            self.channels = self.channels_orig
 
         # Duration.
         match = re.search(

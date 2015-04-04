@@ -178,7 +178,7 @@ class Matcher(object):
         # *but* some matches may be pruned because we don't bother to
         # apply the window (allowable drift in time alignment) unless
         # there are more than threshcount matches at the single best time skew.
-        # Note: now we allow multiple matches per ID, this may need to grow 
+        # Note: now we allow multiple matches per ID, this may need to grow
         # so it can grow inside the loop.
         results = np.zeros((len(ids), 5), np.int32)
         if not hits.size:
@@ -208,7 +208,7 @@ class Matcher(object):
                 results[nresults, :] = [id, count, mode+mintime, rawcount, urank]
                 nresults += 1
                 if nresults >= results.shape[0]:
-                    results = np.vstack([results, np.zeros(results.shape, 
+                    results = np.vstack([results, np.zeros(results.shape,
                                                            np.int32)])
                 # Clear this hit to find next largest.
                 bincounts[max(0, mode-self.window) : (mode+self.window+1)] = 0
@@ -320,7 +320,7 @@ class Matcher(object):
             plotted over a spectrogram """
         # Make the spectrogram
         #d, sr = librosa.load(filename, sr=analyzer.target_sr)
-        d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr)
+        d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr, channels=1)
         sgram = np.abs(librosa.stft(d, n_fft=analyzer.n_fft,
                                     hop_length=analyzer.n_hop,
                                     window=np.hanning(analyzer.n_fft+2)[1:-1]))

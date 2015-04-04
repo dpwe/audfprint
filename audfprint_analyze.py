@@ -24,7 +24,6 @@ import time
 import hash_table
 
 import librosa
-import audioread # for NoBackendError
 
 import audio_read
 
@@ -351,7 +350,7 @@ class Analyzer(object):
         else:
             try:
                 #[d, sr] = librosa.load(filename, sr=self.target_sr)
-                d, sr = audio_read.audio_read(filename, sr=self.target_sr)
+                d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
             except: # audioread.NoBackendError:
                 message = "wavfile2peaks: Error reading" + filename
                 if self.fail_on_error:

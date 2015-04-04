@@ -6,7 +6,7 @@
 # 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 
 #AUDFPRINT=python audfprint.py --skip-existing --continue-on-error
-AUDFPRINT=python audfprint.py --density 100
+AUDFPRINT=python audfprint.py --density 100 --skip-existing
 
 test: test_onecore test_onecore_precomp test_onecore_precomppk test_mucore test_mucore_precomp
 	rm -rf precompdir precompdir_mu
