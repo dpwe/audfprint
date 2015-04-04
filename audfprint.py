@@ -50,50 +50,49 @@ def ensure_dir(dirname):
 
 # basic operations, each in a separate function
 
-def file_precompute_peaks(analyzer, filename, precompdir,
-                           precompext=audfprint_analyze.PRECOMPPKEXT):
+def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
+                                    precompext=None, hashes_not_peaks=True,
+                                    skip_existing=False):
     """ Perform precompute action for one file, return list
         of message strings """
-    peaks = analyzer.wavfile2peaks(filename)
+    # First, form the output filename to check if it exists.
     # strip relative directory components from file name
     # Also remove leading absolute path (comp == '')
     relname = '/'.join([comp for comp in filename.split('/')
                         if comp != '.' and comp != '..' and comp != ''])
     root = os.path.splitext(relname)[0]
+    if precompext is None:
+      if hashes_not_peaks:
+        precompext = audfprint_analyze.PRECOMPEXT
+      else:
+        precompext = audfprint_analyze.PRECOMPPKEXT
     opfname = os.path.join(precompdir, root+precompext)
-    # Make sure the directory exists
-    ensure_dir(os.path.split(opfname)[0])
-    # save the hashes file
-    audfprint_analyze.peaks_save(opfname, peaks)
-    return ["wrote " + opfname + " ( %d peaks, %.3f sec)" \
-                                   % (len(peaks), analyzer.soundfiledur)]
+    if skip_existing and os.path.isfile(opfname):
+      return ["file " + opfname + " exists (and --skip-existing); skipping"]
+    else:
+      # Make sure the directory exists
+      ensure_dir(os.path.split(opfname)[0])
+      # Do the analysis
+      if hashes_not_peaks:
+        output = analyzer.wavfile2hashes(filename)
+        audfprint_analyze.hashes_save(opfname, output)
+        type = "hashes"
+      else:
+        output = analyzer.wavfile2peaks(filename)
+        audfprint_analyze.peaks_save(opfname, output)
+        type = "peaks"
+      # save the hashes or peaks file
+      return ["wrote " + opfname + " ( %d %s, %.3f sec)" \
+              % (len(output), type, analyzer.soundfiledur)]
 
-def file_precompute_hashes(analyzer, filename, precompdir,
-                          precompext=audfprint_analyze.PRECOMPEXT):
-    """ Perform precompute action for one file, return list
-        of message strings """
-    hashes = analyzer.wavfile2hashes(filename)
-    # strip relative directory components from file name
-    # Also remove leading absolute path (comp == '')
-    relname = '/'.join([comp for comp in filename.split('/')
-                        if comp != '.' and comp != '..' and comp != ''])
-    root = os.path.splitext(relname)[0]
-    opfname = os.path.join(precompdir, root+precompext)
-    # Make sure the directory exists
-    ensure_dir(os.path.split(opfname)[0])
-    # save the hashes file
-    audfprint_analyze.hashes_save(opfname, hashes)
-    return ["wrote " + opfname + " ( %d hashes, %.3f sec)" \
-                                   % (len(hashes), analyzer.soundfiledur)]
-
-def file_precompute(analyzer, filename, precompdir, type='peaks'):
+def file_precompute(analyzer, filename, precompdir, type='peaks', skip_existing=False):
     """ Perform precompute action for one file, return list
         of message strings """
     print(time.ctime(), "precomputing", type, "for", filename, "...")
-    if type == 'peaks':
-        return file_precompute_peaks(analyzer, filename, precompdir)
-    else:
-        return file_precompute_hashes(analyzer, filename, precompdir)
+    hashes_not_peaks = (type=='hashes')
+    return file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
+                                           hashes_not_peaks=hashes_not_peaks,
+                                           skip_existing=skip_existing)
 
 def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     """ Populate a hash table from a list, used as target for
@@ -111,7 +110,7 @@ def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     else:
         return ht
 
-def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report):
+def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report, skip_existing=False):
     """ Breaks out the core part of running the command.
         This is just the single-core versions.
     """
@@ -129,7 +128,7 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
     elif cmd == 'precompute':
         # just precompute fingerprints, single core
         for filename in filename_iter:
-            report(file_precompute(analyzer, filename, outdir, type))
+            report(file_precompute(analyzer, filename, outdir, type, skip_existing=skip_existing))
 
     elif cmd == 'match':
         # Running query, single-core mode
@@ -198,12 +197,12 @@ def matcher_file_match_to_msgs(matcher, analyzer, hash_tab, filename):
     return matcher.file_match_to_msgs(analyzer, hash_tab, filename)
 
 def do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter, matcher,
-                     outdir, type, report, ncores):
+                     outdir, type, report, skip_existing=False, ncores=1):
     """ Run the actual command, using multiple processors """
     if cmd == 'precompute':
         # precompute fingerprints with joblib
         msgslist = joblib.Parallel(n_jobs=ncores)(
-            joblib.delayed(file_precompute)(analyzer, file, outdir, type)
+            joblib.delayed(file_precompute)(analyzer, file, outdir, type, skip_existing)
             for file in filename_iter
         )
         # Collapse into a single list of messages
@@ -315,6 +314,7 @@ Options:
   -H <val>, --ncores <val>        Number of processes to use [default: 1]
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -K, --precompute-peaks          Precompute just landmarks (else full hashes)
+  -k, --skip-existing             On precompute, skip items if output file already exists
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
@@ -404,10 +404,13 @@ def main(argv):
         # "merge"/"newmerge" are always single-thread processes
         do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter,
                          matcher, args['--precompdir'],
-                         precomp_type, report, ncores)
+                         precomp_type, report,
+                         skip_existing=args['--skip-existing'],
+                         ncores=ncores)
     else:
         do_cmd(cmd, analyzer, hash_tab, filename_iter,
-               matcher, args['--precompdir'], precomp_type, report)
+               matcher, args['--precompdir'], precomp_type, report,
+               skip_existing=args['--skip-existing'])
 
     elapsedtime = time.clock() - initticks
     if analyzer and analyzer.soundfiletotaldur > 0.:
