@@ -383,7 +383,8 @@ def main(argv):
 
         else:
             # Load existing hash table file (add, match, merge)
-            report([time.ctime() + " Reading hash table " + dbasename])
+            if args['--verbose']:
+                report([time.ctime() + " Reading hash table " + dbasename])
             hash_tab = hash_table.HashTable(dbasename)
             if analyzer and 'samplerate' in hash_tab.params \
                    and hash_tab.params['samplerate'] != analyzer.target_sr:
