@@ -6,6 +6,8 @@ Class to do the analysis of wave files into hash constellations.
 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 """
 
+from __future__ import print_function
+
 import os
 import numpy as np
 
@@ -139,7 +141,8 @@ class Analyzer(object):
         self.soundfiletotaldur = 0.0
         # .. and count of files
         self.soundfilecount = 0
-
+        # Control behavior on file reading error
+        self.fail_on_error = True
 
     def spreadpeaksinvector(self, vector, width=4.0):
         """ Create a blurred version of vector, where each of the local maxes
@@ -279,7 +282,7 @@ class Analyzer(object):
         else:
             # The sgram is identically zero, i.e., the input signal was identically
             # zero.  Not good, but let's let it through for now.
-            print "find_peaks: Warning: input signal is identically zero."
+            print("find_peaks: Warning: input signal is identically zero.")
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
         sgram = np.array([scipy.signal.lfilter([1, -1],
@@ -349,8 +352,11 @@ class Analyzer(object):
             try:
                 #[d, sr] = librosa.load(filename, sr=self.target_sr)
                 d, sr = audio_read.audio_read(filename, sr=self.target_sr)
-            except audioread.NoBackendError:
-                print "wavfile2peaks: Error: Unable to find a backend for", filename
+            except: # audioread.NoBackendError:
+                message = "wavfile2peaks: Error reading" + filename
+                if self.fail_on_error:
+                  raise IOError(message)
+                print(message, "skipping")
                 d = []
                 sr = self.target_sr
             # Store duration in a global because it's hard to handle
@@ -387,6 +393,8 @@ class Analyzer(object):
             self.soundfilecount += 1
         else:
             peaks = self.wavfile2peaks(filename, self.shifts)
+            if len(peaks) == 0:
+              return []
             # Did we get returned a list of lists of peaks due to shift?
             if isinstance(peaks[0], list):
                 peaklists = peaks

@@ -70,20 +70,26 @@ def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
     if skip_existing and os.path.isfile(opfname):
       return ["file " + opfname + " exists (and --skip-existing); skipping"]
     else:
-      # Make sure the directory exists
-      ensure_dir(os.path.split(opfname)[0])
       # Do the analysis
       if hashes_not_peaks:
-        output = analyzer.wavfile2hashes(filename)
-        audfprint_analyze.hashes_save(opfname, output)
         type = "hashes"
+        saver = audfprint_analyze.hashes_save
+        output = analyzer.wavfile2hashes(filename)
       else:
-        output = analyzer.wavfile2peaks(filename)
-        audfprint_analyze.peaks_save(opfname, output)
         type = "peaks"
+        saver = audfprint_analyze.peaks_save
+        output = analyzer.wavfile2peaks(filename)
       # save the hashes or peaks file
-      return ["wrote " + opfname + " ( %d %s, %.3f sec)" \
-              % (len(output), type, analyzer.soundfiledur)]
+      if len(output) == 0:
+        message = "Zero length analysis for " + filename + " -- not saving."
+      else:
+        # Make sure the output directory exists
+        ensure_dir(os.path.split(opfname)[0])
+        # Write the file
+        saver(opfname, output)
+        message = ("wrote " + opfname + " ( %d %s, %.3f sec)" \
+                   % (len(output), type, analyzer.soundfiledur))
+      return [message]
 
 def file_precompute(analyzer, filename, precompdir, type='peaks', skip_existing=False):
     """ Perform precompute action for one file, return list
@@ -249,6 +255,7 @@ def setup_analyzer(args):
     if analyzer.shifts == 0:
         # Default shift is 4 for match, otherwise 1
         analyzer.shifts = 4 if args['match'] else 1
+    analyzer.fail_on_error = not args['--continue-on-error']
     return analyzer
 
 # Command to separate out setting of matcher parameters
@@ -315,6 +322,7 @@ Options:
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
   -K, --precompute-peaks          Precompute just landmarks (else full hashes)
   -k, --skip-existing             On precompute, skip items if output file already exists
+  -C, --continue-on-error         Keep processing despite errors reading input
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
