@@ -45,6 +45,8 @@ Also uses numpy and scipy, which need to be installed, e.g. "pip install numpy",
 
 Parallel processing relies on joblib module (and multiprocessing module), which are likely already installed.
 
+This version uses `ffmpeg` to read input files.  You must have a working `ffmpeg` binary in your path (try `ffmpeg -V` at the command prompt).
+
 Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/ .  This python code will actually read and use databases created by the Matlab code (version 0.90 upwards).
 
 Usage
