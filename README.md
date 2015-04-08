@@ -1,18 +1,22 @@
 audfprint
 =========
 
-Audio landmark-based fingerprinting.  
+Landmark-based audio fingerprinting.
 
 ```
-Create a new fingerprint dbase with new, 
-append new files to an existing database with add, 
-merge fingerprint databases into another with merge, 
-precompute per-file fingerprints with precompute, 
-or identify noisy query excerpts with match.
+Create a new fingerprint dbase with "new",
+append new files to an existing database with "add",
+or identify noisy query excerpts with "match".
+"precompute" writes a *.fpt file under precompdir
+with precomputed fingerprint for each input wav file.
+"merge" combines previously-created databases into
+an existing database; "newmerge" combines existing
+databases to create a new one.
 
-Usage: audfprint (new | add | merge | precompute | match) [-d <dbase> | --dbase <dbase>] [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge | newmerge) [options] <file>...
 
 Options:
+  -d <dbase>, --dbase <dbase>     Fingerprint database file
   -n <dens>, --density <dens>     Target hashes per second [default: 20.0]
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
@@ -20,19 +24,26 @@ Options:
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
-  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 1]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 2]
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
+  -X, --exact-count               Flag to use more precise (but slower) match counting
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
+  -D <val>, --search-depth <val>  How far down to search raw matching track list [default: 100]
   -H <val>, --ncores <val>        Number of processes to use [default: 1]
   -o <name>, --opfile <name>      Write output (matches) to this file, not stdout [default: ]
+  -K, --precompute-peaks          Precompute just landmarks (else full hashes)
+  -k, --skip-existing             On precompute, skip items if output file already exists
+  -C, --continue-on-error         Keep processing despite errors reading input
   -l, --list                      Input files are lists, not audio
   -T, --sortbytime                Sort multiple hits per file by time (instead of score)
   -v <val>, --verbose <val>       Verbosity level [default: 1]
   -I, --illustrate                Make a plot showing the match
+  -J, --illustrate-hpf            Plot the match, using onset enhancement
   -W <dir>, --wavdir <dir>        Find sound files under this dir [default: ]
+  -V <ext>, --wavext <ext>        Extension to add to wav file names [default: ]
   --version                       Report version number
   --help                          Print this message
 ```
@@ -44,6 +55,8 @@ Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt or "pi
 Also uses numpy and scipy, which need to be installed, e.g. "pip install numpy", "pip install scipy".
 
 Parallel processing relies on joblib module (and multiprocessing module), which are likely already installed.
+
+This version uses `ffmpeg` to read input files.  You must have a working `ffmpeg` binary in your path (try `ffmpeg -V` at the command prompt).
 
 Based on Matlab prototype, http://www.ee.columbia.edu/~dpwe/resources/matlab/audfprint/ .  This python code will actually read and use databases created by the Matlab code (version 0.90 upwards).
 
@@ -87,6 +100,22 @@ Matched query.mp3 5.573 sec 204 raw hashes as Nine_Lives/05-Full_Circle.mp3 at 5
 Processed 1 files (5.8 s total dur) in 2.6 s sec = 0.443 x RT
 ```
 The query contained audio from `Nine_Lives/05-Full_Circle.mp3` starting at 50.085 sec into the track.  There were a total of 17 landmark hashes shared between the query and that track, and 14 of them had a consistent time offset.  Generally, anything more than 5 or 6 consistently-timed matching hashes indicate a true match, and random chance will result in fewer than 1% of the raw common hashes being temporally consistent.
+
+Merge a previously-computed database into an existing one:
+```
+> python audfprint.py merge --dbase fpdbase.pklz fpdbase0.pklz
+Wed Apr  8 18:31:29 2015 Reading hash table fpdbase.pklz
+Read fprints for 4 files ( 126989 hashes) from fpdbase.pklz
+Read fprints for 9 files ( 280424 hashes) from fpdbase0.pklz
+Saved fprints for 13 files ( 407413 hashes) to fpdbase.pklz
+```
+Merge two existing databases to create a new, third one:
+```
+> python audfprint.py newmerge --dbase fpdbase_new.pklz fpdbase.pklz fpdbase0.pklz
+Read fprints for 4 files ( 126989 hashes) from fpdbase.pklz
+Read fprints for 9 files ( 280424 hashes) from fpdbase0.pklz
+Saved fprints for 13 files ( 407363 hashes) to fpdbase_new.pklz
+```
 
 Scaling
 -------
