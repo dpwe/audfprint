@@ -25,6 +25,12 @@ test_onecore_precomp: precompdir
 	${AUDFPRINT} merge --dbase fpdbase.pklz fpdbase0.pklz
 	${AUDFPRINT} match --dbase fpdbase.pklz precompdir/query.afpt
 
+test_onecore_newmerge: precompdir
+	${AUDFPRINT} new --dbase fpdbase0.pklz precompdir/Nine_Lives/0*
+	${AUDFPRINT} new --dbase fpdbase.pklz precompdir/Nine_Lives/1*
+	${AUDFPRINT} newmerge --dbase fpdbase_new.pklz fpdbase.pklz fpdbase0.pklz
+	${AUDFPRINT} match --dbase fpdbase_new.pklz precompdir/query.afpt
+
 precompdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
 	rm -rf precompdir
 	mkdir precompdir

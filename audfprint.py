@@ -292,12 +292,15 @@ def setup_reporter(args):
 
 # CLI specified via usage message thanks to docopt
 USAGE = """
-Audio landmark-based fingerprinting.
-Create a new fingerprint dbase with new,
-append new files to an existing database with add,
-or identify noisy query excerpts with match.
-"Precompute" writes a *.fpt file under fptdir with
-precomputed fingerprint for each input wav file.
+Landmark-based audio fingerprinting.
+Create a new fingerprint dbase with "new",
+append new files to an existing database with "add",
+or identify noisy query excerpts with "match".
+"precompute" writes a *.fpt file under precompdir
+with precomputed fingerprint for each input wav file.
+"merge" combines previously-created databases into
+an existing database; "newmerge" combines existing
+databases to create a new one.
 
 Usage: audfprint (new | add | match | precompute | merge | newmerge) [options] <file>...
 
@@ -334,7 +337,7 @@ Options:
   --help                          Print this message
 """
 
-__version__ = 20140906
+__version__ = 20150406
 
 def main(argv):
     """ Main routine for the command-line interface to audfprint """
