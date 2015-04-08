@@ -8,13 +8,14 @@ It assumes we are running on a Linux host, with the relevant data files already 
 
 * This version of audfprint relies on `ffmpeg` to read audio files.  You should check that you have a working version by typing `ffmpeg -version` at the command prompt.  If the command is not found, you should install it with something like `sudo apt-get install ffmpeg` (for Ubuntu) or `brew install ffmpeg` (for Macs with [homebrew](http://brew.sh) installed).
 
-* Download and unpack [audfprint](https://github.com/dpwe/audfprint).  Specifically, we are using the 'ia' branch, which includes a few small tweaks for this task.  We'll assume we're running inside the source directory which contains `audfprint.py` etc.
+* Download and unpack [audfprint](https://github.com/dpwe/audfprint).  We'll assume we're running inside the source directory which contains `audfprint.py` etc.
 
 ```shell
-$ wget https://github.com/dpwe/audfprint/archive/ia.zip
-$ unzip ia.zip
-$ cd audfprint-ia/
+$ wget https://github.com/dpwe/audfprint/archive/master.zip
+$ unzip master.zip
+$ cd audfprint-master/
 ```
+
 * We will make plain text list files containing paths to all the reference advert files, and the TV shows to be searched.  These files can be audio or video; as long as `ffmpeg` can read them, we should be OK.
 
 ```shell
