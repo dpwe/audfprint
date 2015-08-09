@@ -24,7 +24,7 @@ Options:
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
-  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a matlch [default: 2]
+  -w <val>, --match-win <val>     Maximum tolerable frame skew to count as a match [default: 2]
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting
