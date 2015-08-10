@@ -182,7 +182,8 @@ class Matcher(object):
                         maxnresults *= 2
                         results.resize((maxnresults, 5))
                     if self.find_time_range:
-                        min_time, max_time = self._calculate_time_ranges(hits, id, mode)
+                        min_time, max_time = self._calculate_time_ranges(
+                            hits, id, mode)
                     results[nresults, :] = [id, filtcount, mode, rawcount,
                                             urank, min_time, max_time]
                     nresults += 1
@@ -237,17 +238,20 @@ class Matcher(object):
                     # Too few - skip to the next id
                     still_looking = False
                     continue
-                count = np.sum(bincounts[max(0, mode-self.window) :
-                                         (mode+self.window+1)])
+                count = np.sum(bincounts[max(0, mode - self.window) :
+                                         (mode + self.window + 1)])
                 if self.find_time_range:
-                    min_time, max_time = self._calculate_time_ranges(hits, id, mode)
-                results[nresults, :] = [id, count, mode+mintime, rawcount, urank, min_time, max_time]
+                    min_time, max_time = self._calculate_time_ranges(
+                        hits, id, mode)
+                results[nresults, :] = [id, count, mode + mintime, rawcount,
+                                        urank, min_time, max_time]
                 nresults += 1
                 if nresults >= results.shape[0]:
                     results = np.vstack([results, np.zeros(results.shape,
                                                            np.int32)])
                 # Clear this hit to find next largest.
-                bincounts[max(0, mode-self.window) : (mode+self.window+1)] = 0
+                bincounts[max(0, mode - self.window):
+                          (mode + self.window + 1)] = 0
         return results[:nresults, :]
 
     def match_hashes(self, ht, hashes, hashesfor=None):
@@ -322,7 +326,7 @@ class Matcher(object):
         rslts, dur, nhash = self.match_file(analyzer, ht, qry, number)
         t_hop = analyzer.n_hop/float(analyzer.target_sr)
         if self.verbose:
-            qrymsg = qry + (' %.3f '%dur) + "sec " + str(nhash) + " raw hashes"
+            qrymsg = qry + (' %.1f '%dur) + "sec " + str(nhash) + " raw hashes"
         else:
             qrymsg = qry
 
@@ -340,16 +344,16 @@ class Matcher(object):
                 # figure the number of raw and aligned matches for top hit
                 if self.verbose:
                     if self.find_time_range:
-                        msg = ("Matched {:.3f} .. {:.3f} s in {:s}"
-                               " to {:.3f} .. {:.3f} s in {:s}").format(
-                            min_time*t_hop, max_time*t_hop, qry,
-                            (min_time + aligntime)*t_hop,
-                            (max_time + aligntime)*t_hop, ht.names[tophitid])
+                        msg = ("Matched {:6.1f} s starting at {:6.1f} s in {:s}"
+                               " to time {:6.1f} s in {:s}").format(
+                            (max_time - min_time)*t_hop, min_time*t_hop, qry,
+                            (min_time + aligntime)*t_hop, ht.names[tophitid])
                     else:
-                        msg = "Matched {:s} as {:s} at {:.3f} s".format(
+                        msg = "Matched {:s} as {:s} at {:6.1f} s".format(
                             qrymsg, ht.names[tophitid], aligntime*t_hop)
-                    msg += " with {:d} of {:d} hashes at rank {:d}".format(
-                            nhashaligned, nhashraw, rank)
+                    msg += (" with {:5d} of {:5d} common hashes"
+                            " at rank {:2d}").format(
+                        nhashaligned, nhashraw, rank)
                     msgrslt.append(msg)
                 else:
                     msgrslt.append(qrymsg + "\t" + ht.names[tophitid])

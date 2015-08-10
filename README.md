@@ -129,16 +129,17 @@ python audfprint.py match --dbase fpdbase.pklz query.mp3 --find-time-range
 Sun Aug  9 18:13:54 2015 Reading hash table fpdbase.pklz
 Read fprints for 9 files ( 158827 hashes) from fpdbase.pklz
 Sun Aug  9 18:13:57 2015 Analyzed #0 query.mp3 of 5.619 s to 928 hashes
-Matched 0.836 .. 4.412 s in query.mp3 to 50.921 .. 54.497 s in Nine_Lives/05-Full_Circle.mp3 with 12 of 39 hashes at rank 0
+Matched    3.6 s starting at    0.8 s in query.mp3 to time   50.9 s in Nine_Lives/05-Full_Circle.mp3 with    12 of    39 common hashes at rank  0
 Processed 1 files (5.8 s total dur) in 2.6 s sec = 0.451 x RT
 ```
 
-Notice how the message includes the precise time ranges in both query and
-reference item spanning the matches.  Because a single spurious match elsewhere
-in the file can cause misleading results, these times are calculated after
-discarding a small number of the earliest and latest matches; this proportion
-is set by `--time-quantile` which is 0.01 by default (1% of matches ignored
-at beginning and end of match region when calculating match time range).
+Notice how the message includes the precise duration and time points
+in both query and reference item spanning the matches.  Because a
+single spurious match elsewhere in the file can cause misleading
+results, these times are calculated after discarding a small number of
+the earliest and latest matches; this proportion is set by
+`--time-quantile` which is 0.01 by default (1% of matches ignored at
+beginning and end of match region when calculating match time range).
 
 Scaling
 -------

@@ -312,6 +312,7 @@ Options:
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
+  -u <val>, --maxtimebits <val>   maxtime as a number of bits (16384 == 14 bits)
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
@@ -364,6 +365,13 @@ def main(argv):
     # Keep track of wall time
     initticks = time.clock()
 
+    # Command line sanity.
+    if args["--maxtimebits"]:
+        args["--maxtimebits"] = int(args["--maxtimebits"])
+    else:
+        args["--maxtimebits"] = hash_table._bitsfor(int(args["--maxtime"]))
+
+
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if not (cmd is "merge"
                                             or cmd is "newmerge") else None
@@ -381,9 +389,10 @@ def main(argv):
             # Check that the output directory can be created before we start
             ensure_dir(os.path.split(dbasename)[0])
             # Create a new hash table
-            hash_tab = hash_table.HashTable(hashbits=int(args['--hashbits']),
-                                            depth=int(args['--bucketsize']),
-                                            maxtime=int(args['--maxtime']))
+            hash_tab = hash_table.HashTable(
+                hashbits=int(args['--hashbits']),
+                depth=int(args['--bucketsize']),
+                maxtime=(1 << int(args['--maxtimebits'])))
             # Set its samplerate param
             if analyzer:
                 hash_tab.params['samplerate'] = analyzer.target_sr
