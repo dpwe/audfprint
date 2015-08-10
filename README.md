@@ -117,6 +117,29 @@ Read fprints for 9 files ( 280424 hashes) from fpdbase0.pklz
 Saved fprints for 13 files ( 407363 hashes) to fpdbase_new.pklz
 ```
 
+Locating Matches
+----------------
+
+To find out not just that two files match, and not just the relative timing
+between them that makes them line up, but the exact *time ranges* that match
+in both query and reference files, use `--find-time-range`:
+
+```
+python audfprint.py match --dbase fpdbase.pklz query.mp3 --find-time-range
+Sun Aug  9 18:13:54 2015 Reading hash table fpdbase.pklz
+Read fprints for 9 files ( 158827 hashes) from fpdbase.pklz
+Sun Aug  9 18:13:57 2015 Analyzed #0 query.mp3 of 5.619 s to 928 hashes
+Matched 0.836 .. 4.412 s in query.mp3 to 50.921 .. 54.497 s in Nine_Lives/05-Full_Circle.mp3 with 12 of 39 hashes at rank 0
+Processed 1 files (5.8 s total dur) in 2.6 s sec = 0.451 x RT
+```
+
+Notice how the message includes the precise time ranges in both query and
+reference item spanning the matches.  Because a single spurious match elsewhere
+in the file can cause misleading results, these times are calculated after
+discarding a small number of the earliest and latest matches; this proportion
+is set by `--time-quantile` which is 0.01 by default (1% of matches ignored
+at beginning and end of match region when calculating match time range).
+
 Scaling
 -------
 The fingerprint database records 2^20 (~1M) distinct fingerprints, with (by default) 100 entries for each fingerprint bucket.  When the bucket fills, track entries are dropped at random; since matching depends only on making a minimum number of matches, but no particular match, dropping some of the more popular ones does not prevent matching.  The Matlab version has been successfully used for databases of 100k+ tracks.  Reducing the hash density (`--density`) leads to smaller reference database size, and the capacity to record more reference items before buckets begin to fill; a density of 7.0 works well.

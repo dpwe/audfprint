@@ -271,6 +271,8 @@ def setup_matcher(args):
     matcher.illustrate = args['--illustrate'] | args['--illustrate-hpf']
     matcher.illustrate_hpf = args['--illustrate-hpf']
     matcher.verbose = args['--verbose']
+    matcher.find_time_range = args['--find-time-range']
+    matcher.time_quantile = float(args['--time-quantile'])
     return matcher
 
 # Command to construct the reporter object
@@ -317,6 +319,8 @@ Options:
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting
+  -R, --find-time-range           Report the time support of each match
+  -Q, --time-quantile <val>       Quantile at extremes of time support [default: 0.05]
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]

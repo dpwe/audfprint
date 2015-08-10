@@ -16,6 +16,8 @@ import resource
 import audfprint_analyze
 import matplotlib.pyplot as plt
 
+import audio_read
+
 from scipy import stats
 
 def log(message):
@@ -82,6 +84,10 @@ class Matcher(object):
         self.illustrate = False
         # Careful counts?
         self.exact_count = False
+        # Search for time range?
+        self.find_time_range = False
+        # Quantile of time range to report.
+        self.time_quantile = 0.02
 
     def _best_count_ids(self, hits, ht):
         """ Return the indexes for the ids with the best counts.
@@ -132,6 +138,16 @@ class Matcher(object):
                             matchhasheshash >> timebits]
         return matchhashes
 
+    def _calculate_time_ranges(self, hits, id, mode):
+        """Given the id and mode, return the actual time support."""
+        match_times = sorted(hits[row, 3]
+                             for row in np.nonzero(hits[:, 0]==id)[0]
+                             if mode - self.window <= hits[row, 1]
+                             and hits[row, 1] <= mode + self.window)
+        min_time = match_times[int(len(match_times)*self.time_quantile)]
+        max_time = match_times[int(len(match_times)*(1.0 - self.time_quantile)) - 1]
+        return min_time, max_time
+
     def _exact_match_counts(self, hits, ids, rawcounts, hashesfor=None):
         """ Find the number of "filtered" (time-consistent) matching
             hashes for each of the promising ids in <ids>.  Return an
@@ -145,13 +161,14 @@ class Matcher(object):
         allids = hits[:, 0]
         alltimes = hits[:, 1]
         allhashes = hits[:, 2]
-        allotimes = hits[:, 3]
-        maxotime = np.amax(allotimes)
+        #allotimes = hits[:, 3]
         # Allocate enough space initially for 4 modes per hit
         maxnresults = len(ids) * 4
-        results = np.zeros((maxnresults, 5), np.int32)
+        results = np.zeros((maxnresults, 7), np.int32)
         nresults = 0
-        for urank, id, rawcount in zip(range(len(ids)), ids, rawcounts):
+        min_time = 0
+        max_time = 0
+        for urank, (id, rawcount) in enumerate(zip(ids, rawcounts)):
             modes, counts = find_modes(alltimes[np.nonzero(allids==id)[0]],
                                        window=self.window,
                                        threshold=self.threshcount)
@@ -164,23 +181,38 @@ class Matcher(object):
                         # Extend array
                         maxnresults *= 2
                         results.resize((maxnresults, 5))
+                    if self.find_time_range:
+                        min_time, max_time = self._calculate_time_ranges(hits, id, mode)
                     results[nresults, :] = [id, filtcount, mode, rawcount,
-                                            urank]
+                                            urank, min_time, max_time]
                     nresults += 1
         return results[:nresults, :]
 
     def _approx_match_counts(self, hits, ids, rawcounts):
-        """ Quick and slightly inaccurate routine to find the
-            number of time-aligned hits from the raw iist of hits.
-            Only considers largest mode for reference ID match.
-            Returns rows [id, filt_count, time_skew, raw_count, orig_rank] """
+        """ Quick and slightly inaccurate routine to count time-aligned hits.
+
+        Only considers largest mode for reference ID match.
+
+        Args:
+          hits: np.array of hash matches, each row consists of
+            <track_id, skew_time, ...>.
+          ids: list of the IDs to check, based on raw match count.
+          rawcounts: list giving the actual raw counts for each id to try.
+
+        Returns:
+            Rows of [id, filt_count, time_skew, raw_count, orig_rank].
+            Ids occur in the same order as the input list, but ordering
+            of (potentially multiple) hits within each track may not be
+            sorted (they are sorted by the largest single count value, not
+            the total count integrated over -window:+window bins).
+        """
         # In fact, the counts should be the same as exact_match_counts
         # *but* some matches may be pruned because we don't bother to
         # apply the window (allowable drift in time alignment) unless
         # there are more than threshcount matches at the single best time skew.
         # Note: now we allow multiple matches per ID, this may need to grow
         # so it can grow inside the loop.
-        results = np.zeros((len(ids), 5), np.int32)
+        results = np.zeros((len(ids), 7), np.int32)
         if not hits.size:
             # No hits found, return empty results
             return results
@@ -193,7 +225,9 @@ class Matcher(object):
         # Hash IDs and times together, so only a single bincount
         timebits = max(1, encpowerof2(np.amax(alltimes)))
         allbincounts = np.bincount((allids << timebits) + alltimes)
-        for urank, id, rawcount in zip(range(len(ids)), ids, rawcounts):
+        min_time = 0
+        max_time = 0
+        for urank, (id, rawcount) in enumerate(zip(ids, rawcounts)):
             # Select the subrange of bincounts corresponding to this id
             bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
             still_looking = True
@@ -205,7 +239,9 @@ class Matcher(object):
                     continue
                 count = np.sum(bincounts[max(0, mode-self.window) :
                                          (mode+self.window+1)])
-                results[nresults, :] = [id, count, mode+mintime, rawcount, urank]
+                if self.find_time_range:
+                    min_time, max_time = self._calculate_time_ranges(hits, id, mode)
+                results[nresults, :] = [id, count, mode+mintime, rawcount, urank, min_time, max_time]
                 nresults += 1
                 if nresults >= results.shape[0]:
                     results = np.vstack([results, np.zeros(results.shape,
@@ -299,16 +335,22 @@ class Matcher(object):
             else:
                 msgrslt.append(qrymsg+"\t")
         else:
-            for (tophitid, nhashaligned, aligntime, nhashraw, rank) in rslts:
+            for (tophitid, nhashaligned, aligntime, nhashraw, rank,
+                 min_time, max_time) in rslts:
                 # figure the number of raw and aligned matches for top hit
                 if self.verbose:
-                    msgrslt.append("Matched " + qrymsg + " as "
-                                   + ht.names[tophitid] \
-                                   + (" at %.3f " % (aligntime*t_hop))
-                                   + "s " \
-                                   + "with " + str(nhashaligned) \
-                                   + " of " + str(nhashraw) + " hashes" \
-                                   + " at rank " + str(rank))
+                    if self.find_time_range:
+                        msg = ("Matched {:.3f} .. {:.3f} s in {:s}"
+                               " to {:.3f} .. {:.3f} s in {:s}").format(
+                            min_time*t_hop, max_time*t_hop, qry,
+                            (min_time + aligntime)*t_hop,
+                            (max_time + aligntime)*t_hop, ht.names[tophitid])
+                    else:
+                        msg = "Matched {:s} as {:s} at {:3f} s".format(
+                            qrymsg, ht.names[tophitid], aligntime*t_hop)
+                    msg += " with {:d} of {:d} hashes at rank {:d}".format(
+                            nhashaligned, nhashraw, rank)
+                    msgrslt.append(msg)
                 else:
                     msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
                 if self.illustrate:
