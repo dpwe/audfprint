@@ -346,7 +346,7 @@ class Matcher(object):
                             (min_time + aligntime)*t_hop,
                             (max_time + aligntime)*t_hop, ht.names[tophitid])
                     else:
-                        msg = "Matched {:s} as {:s} at {:3f} s".format(
+                        msg = "Matched {:s} as {:s} at {:.3f} s".format(
                             qrymsg, ht.names[tophitid], aligntime*t_hop)
                     msg += " with {:d} of {:d} hashes at rank {:d}".format(
                             nhashaligned, nhashraw, rank)
