@@ -92,9 +92,7 @@ class HashTable(object):
         #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
         # Keep only the bottom part of the hash value
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
-        # The IDs we write to the table start at 1, to avoid confusing 
-        # zero (empty) entries with true entries for ID 0 in self.remove().
-        idval = (id_ + 1) << self.maxtimebits
+        idval = id_ << self.maxtimebits
         for time_, hash_ in sortedpairs:
             # How many already stored for this hash?
             count = self.counts[hash_]
@@ -128,8 +126,7 @@ class HashTable(object):
         """
         vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
         maxtimemask = (1 << self.matimebits) - 1
-        # Remember to remove the id offset of 1 added in self.store()
-        ids = (vals >> self.maxtimebits) - 1
+        ids = vals >> self.maxtimebits
         return np.c_[ids, vals & maxtimemask].astype(np.int32)
 
     def get_hits_orig(self, hashes):
@@ -171,8 +168,7 @@ class HashTable(object):
             nids = min(self.depth, self.counts[hash_])
             tabvals = self.table[hash_, :nids]
             hitrows = nhits + np.arange(nids)
-            # IDs stored in values are true IDs + 1, so subtract 1.
-            hits[hitrows, 0] = (tabvals >> self.maxtimebits) - 1
+            hits[hitrows, 0] = tabvals >> self.maxtimebits
             hits[hitrows, 1] = (tabvals & maxtimemask) - time_
             hits[hitrows, 2] = hash_
             hits[hitrows, 3] = time_
@@ -333,8 +329,12 @@ class HashTable(object):
     def remove(self, name):
         """ Remove all data for named entity from the hash table. """
         id_ = self.name_to_id(name)
-        # Test for the ID as stored in table i.e. (id_ + 1 << maxtimebits).
-        id_in_table = (self.table >> self.maxtimebits) == id_ + 1
+        # If we happen to be removing the first item (id_ == 0), this will 
+        # match every empty entry in table.  This is very inefficient, but 
+        # it still works, and it's just one ID.  We could have fixed it by 
+        # making the IDs written in to table start an 1, but that would mess 
+        # up backwards compatibility.
+        id_in_table = (self.table >> self.maxtimebits) == id_
         hashes_removed = 0
         for hash_ in np.nonzero(np.max(id_in_table, axis=1))[0]:
             vals = self.table[hash_, :self.counts[hash_]]

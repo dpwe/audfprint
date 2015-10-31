@@ -13,9 +13,10 @@ test_onecore: fpdbase.pklz
 	python audfprint.py match --dbase fpdbase.pklz query.mp3
 
 test_remove: fpdbase.pklz
-	python audfprint.py remove --dbase fpdbase.pklz Nine_Lives/01-Nine_Lives.mp3
+	python audfprint.py remove --dbase fpdbase.pklz Nine_Lives/05-Full_Circle.mp3 Nine_Lives/01-Nine_Lives.mp3
 	python audfprint.py list --dbase fpdbase.pklz
-	python audfprint.py add --dbase fpdbase.pklz Nine_Lives/01-Nine_Lives.mp3
+	python audfprint.py add --dbase fpdbase.pklz Nine_Lives/01-Nine_Lives.mp3 Nine_Lives/05-Full_Circle.mp3
+	python audfprint.py list --dbase fpdbase.pklz
 	python audfprint.py match --dbase fpdbase.pklz query.mp3
 
 fpdbase.pklz: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
