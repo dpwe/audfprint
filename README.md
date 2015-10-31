@@ -11,9 +11,11 @@ or identify noisy query excerpts with "match".
 with precomputed fingerprint for each input wav file.
 "merge" combines previously-created databases into
 an existing database; "newmerge" combines existing
-databases to create a new one.
+databases to create a new one. 
+"remove" removes the named file(s) from the database.
+"list" prints out all files in database.
 
-Usage: audfprint (new | add | match | precompute | merge | newmerge) [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge | newmerge | remove | list) [options] <file>...
 
 Options:
   -d <dbase>, --dbase <dbase>     Fingerprint database file
