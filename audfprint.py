@@ -149,6 +149,14 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
         report(["Added " +  str(tothashes) + " hashes "
                 + "(%.1f" % (tothashes/float(analyzer.soundfiletotaldur))
                 + " hashes/sec)"])
+    elif cmd == 'remove':
+        # Removing files from hash table.
+        for filename in filename_iter:
+            hash_tab.remove(filename)
+
+    elif cmd == 'list':
+        hash_tab.list(lambda x: report([x]))
+
     else:
         raise ValueError("unrecognized command: "+cmd)
 
@@ -291,7 +299,7 @@ or identify noisy query excerpts with match.
 "Precompute" writes a *.fpt file under fptdir with
 precomputed fingerprint for each input wav file.
 
-Usage: audfprint (new | add | match | precompute | merge | newmerge) [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge | newmerge | list | remove) [options] [<file>]...
 
 Options:
   -d <dbase>, --dbase <dbase>     Fingerprint database file
@@ -331,7 +339,8 @@ def main(argv):
     args = docopt.docopt(USAGE, version=__version__, argv=argv[1:])
 
     # Figure which command was chosen
-    poss_cmds = ['new', 'add', 'precompute', 'merge', 'newmerge', 'match']
+    poss_cmds = ['new', 'add', 'precompute', 'merge', 'newmerge', 'match', 
+                 'list', 'remove']
     cmdlist = [cmdname
                for cmdname in poss_cmds
                if args[cmdname]]
@@ -347,8 +356,9 @@ def main(argv):
     initticks = time.clock()
 
     # Setup the analyzer if we're using one (i.e., unless "merge")
-    analyzer = setup_analyzer(args) if not (cmd is "merge"
-                                            or cmd is "newmerge") else None
+    analyzer = setup_analyzer(args) if not (
+        cmd is "merge" or cmd is "newmerge" 
+        or cmd is "list" or cmd is "remove") else None
 
     precomp_type = 'hashes'
 
@@ -399,8 +409,9 @@ def main(argv):
 
     # How many processors to use (multiprocessing)
     ncores = int(args['--ncores'])
-    if ncores > 1 and not (cmd == "merge" or cmd == "newmerge"):
-        # "merge"/"newmerge" are always single-thread processes
+    if ncores > 1 and not (cmd == "merge" or cmd == "newmerge" or
+                           cmd == "list" or cmd == "remove"):
+        # merge/newmerge/list/remove are always single-thread processes
         do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter,
                          matcher, args['--precompdir'],
                          precomp_type, report, ncores)

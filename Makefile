@@ -5,11 +5,17 @@
 #
 # 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 
-test: test_onecore test_onecore_precomp test_onecore_precomppk test_mucore test_mucore_precomp
+test: test_onecore test_onecore_precomp test_onecore_newmerge test_onecore_precomppk test_mucore test_mucore_precomp test_remove
 	rm -rf precompdir precompdir_mu
 	rm -f fpdbase*.pklz
 
 test_onecore: fpdbase.pklz
+	python audfprint.py match --dbase fpdbase.pklz query.mp3
+
+test_remove: fpdbase.pklz
+	python audfprint.py remove --dbase fpdbase.pklz Nine_Lives/01-Nine_Lives.mp3
+	python audfprint.py list --dbase fpdbase.pklz
+	python audfprint.py add --dbase fpdbase.pklz Nine_Lives/01-Nine_Lives.mp3
 	python audfprint.py match --dbase fpdbase.pklz query.mp3
 
 fpdbase.pklz: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
@@ -18,9 +24,16 @@ fpdbase.pklz: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
 
 test_onecore_precomp: precompdir
 	python audfprint.py new --dbase fpdbase0.pklz precompdir/Nine_Lives/0*
-	python audfprint.py new --dbase fpdbase.pklz precompdir/Nine_Lives/1*
-	python audfprint.py merge --dbase fpdbase.pklz fpdbase0.pklz
-	python audfprint.py match --dbase fpdbase.pklz precompdir/query.afpt
+	python audfprint.py new --dbase fpdbase1.pklz precompdir/Nine_Lives/1*
+	python audfprint.py merge --dbase fpdbase1.pklz fpdbase0.pklz
+	python audfprint.py match --dbase fpdbase1.pklz precompdir/query.afpt
+
+test_onecore_newmerge: precompdir
+	python audfprint.py new --dbase fpdbase0.pklz precompdir/Nine_Lives/0*
+	python audfprint.py new --dbase fpdbase1.pklz precompdir/Nine_Lives/1*
+	rm -f fpdbase2.pklz
+	python audfprint.py newmerge --dbase fpdbase2.pklz fpdbase0.pklz fpdbase1.pklz
+	python audfprint.py match --dbase fpdbase2.pklz precompdir/query.afpt
 
 precompdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
 	rm -rf precompdir
@@ -30,9 +43,9 @@ precompdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py
 
 test_onecore_precomppk: precomppkdir
 	python audfprint.py new --dbase fpdbase0.pklz precomppkdir/Nine_Lives/0*
-	python audfprint.py new --dbase fpdbase.pklz precomppkdir/Nine_Lives/1*
-	python audfprint.py merge --dbase fpdbase.pklz fpdbase0.pklz
-	python audfprint.py match --dbase fpdbase.pklz precomppkdir/query.afpk
+	python audfprint.py new --dbase fpdbase1.pklz precomppkdir/Nine_Lives/1*
+	python audfprint.py merge --dbase fpdbase1.pklz fpdbase0.pklz
+	python audfprint.py match --dbase fpdbase1.pklz precomppkdir/query.afpk
 	rm -rf precomppkdir
 
 precomppkdir: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.py

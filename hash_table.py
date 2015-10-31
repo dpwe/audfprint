@@ -6,6 +6,7 @@ used for the audfprint fingerprinter.
 
 2014-05-25 Dan Ellis dpwe@ee.columbia.edu
 """
+from __future__ import print_function
 
 import numpy as np
 import random
@@ -75,15 +76,7 @@ class HashTable(object):
         """ Store a list of hashes in the hash table
             associated with a particular name (or integer ID) and time.
         """
-        if type(name) is str:
-            # lookup name or assign new
-            if name not in self.names:
-                self.names.append(name)
-                self.hashesperid = np.append(self.hashesperid, [0])
-            id_ = self.names.index(name)
-        else:
-            # we were passed in a numerical id
-            id_ = name
+        id_ = self.name_to_id(name, add_if_missing=True)
         # Now insert the hashes
         hashmask = (1 << self.hashbits) - 1
         #mxtime = self.maxtime
@@ -99,7 +92,9 @@ class HashTable(object):
         #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
         # Keep only the bottom part of the hash value
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
-        idval = id_ << self.maxtimebits
+        # The IDs we write to the table start at 1, to avoid confusing 
+        # zero (empty) entries with true entries for ID 0 in self.remove().
+        idval = (id_ + 1) << self.maxtimebits
         for time_, hash_ in sortedpairs:
             # How many already stored for this hash?
             count = self.counts[hash_]
@@ -133,7 +128,9 @@ class HashTable(object):
         """
         vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
         maxtimemask = (1 << self.matimebits) - 1
-        return np.c_[vals >> self.maxtimebits, vals & maxtimemask].astype(np.int32)
+        # Remember to remove the id offset of 1 added in self.store()
+        ids = (vals >> self.maxtimebits) - 1
+        return np.c_[ids, vals & maxtimemask].astype(np.int32)
 
     def get_hits_orig(self, hashes):
         """ Return np.array of [id, delta_time, hash, time] rows
@@ -174,7 +171,8 @@ class HashTable(object):
             nids = min(self.depth, self.counts[hash_])
             tabvals = self.table[hash_, :nids]
             hitrows = nhits + np.arange(nids)
-            hits[hitrows, 0] = tabvals >> self.maxtimebits
+            # IDs stored in values are true IDs + 1, so subtract 1.
+            hits[hitrows, 0] = (tabvals >> self.maxtimebits) - 1
             hits[hitrows, 1] = (tabvals & maxtimemask) - time_
             hits[hitrows, 2] = hash_
             hits[hitrows, 3] = time_
@@ -195,12 +193,11 @@ class HashTable(object):
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
         nhashes = sum(self.counts)
-        print "Saved fprints for", len(self.names), "files", \
-              "(", nhashes, "hashes)", \
-              "to", name
+        print("Saved fprints for", sum(n is not None for n in self.names), 
+              "files (", nhashes, "hashes) to", name)
         # Report the proportion of dropped hashes (overfull table)
         dropped = nhashes - sum(np.minimum(self.depth, self.counts))
-        print "Dropped hashes=", dropped, "(%.2f%%)" % (100.0*dropped/nhashes)
+        print("Dropped hashes=", dropped, "(%.2f%%)" % (100.0*dropped/nhashes))
 
     def load(self, name):
         """ Read either pklz or mat-format hash table file """
@@ -209,9 +206,8 @@ class HashTable(object):
             params = self.load_matlab(name)
         else:
             params = self.load_pkl(name)
-        print "Read fprints for", len(self.names), "files", \
-              "(", sum(self.counts), "hashes)", \
-              "from", name
+        print("Read fprints for", sum(n is not None for n in self.names), 
+              "files (", sum(self.counts), "hashes) from", name)
         return params
 
     def load_pkl(self, name):
@@ -312,3 +308,52 @@ class HashTable(object):
                 self.counts[hash_] = len(allvals)
 
         self.dirty = True
+
+    def name_to_id(self, name, add_if_missing=False):
+        """ Lookup name in the names list, or optionally add. """
+        if type(name) is str:
+            # lookup name or assign new
+            if name not in self.names:
+                if not add_if_missing:
+                    raise ValueError("name " + name + " not found")
+                # Use an empty slot in the list if one exists.
+                try:
+                    id_ = self.names.index(None)
+                    self.names[id_] = name
+                    self.hashesperid[id_] = 0
+                except ValueError:
+                    self.names.append(name)
+                    self.hashesperid = np.append(self.hashesperid, [0])
+            id_ = self.names.index(name)
+        else:
+            # we were passed in a numerical id
+            id_ = name
+        return id_
+
+    def remove(self, name):
+        """ Remove all data for named entity from the hash table. """
+        id_ = self.name_to_id(name)
+        # Test for the ID as stored in table i.e. (id_ + 1 << maxtimebits).
+        id_in_table = (self.table >> self.maxtimebits) == id_ + 1
+        hashes_removed = 0
+        for hash_ in np.nonzero(np.max(id_in_table, axis=1))[0]:
+            vals = self.table[hash_, :self.counts[hash_]]
+            vals = [v for v, x in zip(vals, id_in_table[hash_]) 
+                    if not x]
+            self.table[hash_] = np.hstack([vals, 
+                                           np.zeros(self.depth - len(vals))])
+            # This will forget how many extra hashes we had dropped until now.
+            self.counts[hash_] = len(vals)
+            hashes_removed += np.sum(id_in_table[hash_])
+        self.names[id_] = None
+        self.hashesperid[id_] = 0
+        self.dirty = True
+        print("Removed", name, "(", hashes_removed, "hashes).")
+
+    def list(self, print_fn=None):
+        """ List all the known items. """
+        if not print_fn:
+            print_fn = print
+        for name, count in zip(self.names, self.hashesperid):
+            if name:
+                print_fn(name + " (" + str(count) + " hashes)")
