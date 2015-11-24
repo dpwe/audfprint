@@ -193,7 +193,8 @@ class HashTable(object):
               "files (", nhashes, "hashes) to", name)
         # Report the proportion of dropped hashes (overfull table)
         dropped = nhashes - sum(np.minimum(self.depth, self.counts))
-        print("Dropped hashes=", dropped, "(%.2f%%)" % (100.0*dropped/nhashes))
+        print("Dropped hashes=", dropped, "(%.2f%%)" % (
+            100.0*dropped/max(1, nhashes)))
 
     def load(self, name):
         """ Read either pklz or mat-format hash table file """
