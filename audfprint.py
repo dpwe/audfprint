@@ -44,7 +44,12 @@ def ensure_dir(dirname):
     """ ensure that the named directory exists """
     if len(dirname):
         if not os.path.exists(dirname):
-            os.makedirs(dirname)
+            # There's a race condition for multiprocessor; don't worry if the 
+            # directory gets created before we get to it.
+            try:
+                os.makedirs(dirname)
+            except:
+                pass
 
 # Command line interface
 
@@ -52,13 +57,20 @@ def ensure_dir(dirname):
 
 def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
                                     precompext=None, hashes_not_peaks=True,
-                                    skip_existing=False):
+                                    skip_existing=False, 
+                                    strip_prefix=None):
     """ Perform precompute action for one file, return list
         of message strings """
-    # First, form the output filename to check if it exists.
+    # If strip_prefix is specified and matches the start of filename, 
+    # remove it from filename.
+    if strip_prefix and filename[:len(strip_prefix)] == strip_prefix:
+        tail_filename = filename[len(strip_prefix):]
+    else:
+        tail_filename = filename
+    # Form the output filename to check if it exists.
     # strip relative directory components from file name
     # Also remove leading absolute path (comp == '')
-    relname = '/'.join([comp for comp in filename.split('/')
+    relname = '/'.join([comp for comp in tail_filename.split('/')
                         if comp != '.' and comp != '..' and comp != ''])
     root = os.path.splitext(relname)[0]
     if precompext is None:
@@ -91,14 +103,15 @@ def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
                    % (len(output), type, analyzer.soundfiledur))
       return [message]
 
-def file_precompute(analyzer, filename, precompdir, type='peaks', skip_existing=False):
+def file_precompute(analyzer, filename, precompdir, type='peaks', skip_existing=False, strip_prefix=None):
     """ Perform precompute action for one file, return list
         of message strings """
     print(time.ctime(), "precomputing", type, "for", filename, "...")
     hashes_not_peaks = (type=='hashes')
     return file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
                                            hashes_not_peaks=hashes_not_peaks,
-                                           skip_existing=skip_existing)
+                                           skip_existing=skip_existing, 
+                                           strip_prefix=strip_prefix)
 
 def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     """ Populate a hash table from a list, used as target for
@@ -116,7 +129,7 @@ def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
     else:
         return ht
 
-def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report, skip_existing=False):
+def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report, skip_existing=False, strip_prefix=None):
     """ Breaks out the core part of running the command.
         This is just the single-core versions.
     """
@@ -134,7 +147,7 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
     elif cmd == 'precompute':
         # just precompute fingerprints, single core
         for filename in filename_iter:
-            report(file_precompute(analyzer, filename, outdir, type, skip_existing=skip_existing))
+            report(file_precompute(analyzer, filename, outdir, type, skip_existing=skip_existing, strip_prefix=strip_prefix))
 
     elif cmd == 'match':
         # Running query, single-core mode
@@ -211,12 +224,13 @@ def matcher_file_match_to_msgs(matcher, analyzer, hash_tab, filename):
     return matcher.file_match_to_msgs(analyzer, hash_tab, filename)
 
 def do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter, matcher,
-                     outdir, type, report, skip_existing=False, ncores=1):
+                     outdir, type, report, skip_existing=False, 
+                     strip_prefix=None, ncores=1):
     """ Run the actual command, using multiple processors """
     if cmd == 'precompute':
         # precompute fingerprints with joblib
         msgslist = joblib.Parallel(n_jobs=ncores)(
-            joblib.delayed(file_precompute)(analyzer, file, outdir, type, skip_existing)
+            joblib.delayed(file_precompute)(analyzer, file, outdir, type, skip_existing, strip_prefix=strip_prefix)
             for file in filename_iter
         )
         # Collapse into a single list of messages
@@ -442,11 +456,13 @@ def main(argv):
                          matcher, args['--precompdir'],
                          precomp_type, report,
                          skip_existing=args['--skip-existing'],
+                         strip_prefix=args['--wavdir'], 
                          ncores=ncores)
     else:
         do_cmd(cmd, analyzer, hash_tab, filename_iter,
                matcher, args['--precompdir'], precomp_type, report,
-               skip_existing=args['--skip-existing'])
+               skip_existing=args['--skip-existing'], 
+               strip_prefix=args['--wavdir'])
 
     elapsedtime = time.clock() - initticks
     if analyzer and analyzer.soundfiletotaldur > 0.:
