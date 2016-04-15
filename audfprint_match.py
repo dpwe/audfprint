@@ -180,7 +180,7 @@ class Matcher(object):
                     if nresults == maxnresults:
                         # Extend array
                         maxnresults *= 2
-                        results.resize((maxnresults, 5))
+                        results.resize((maxnresults, results.shape[1]))
                     if self.find_time_range:
                         min_time, max_time = self._calculate_time_ranges(
                             hits, id, mode)
