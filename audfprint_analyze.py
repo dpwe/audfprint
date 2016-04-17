@@ -352,7 +352,7 @@ class Analyzer(object):
                 #[d, sr] = librosa.load(filename, sr=self.target_sr)
                 d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
             except: # audioread.NoBackendError:
-                message = "wavfile2peaks: Error reading" + filename
+                message = "wavfile2peaks: Error reading " + filename
                 if self.fail_on_error:
                   raise IOError(message)
                 print(message, "skipping")
