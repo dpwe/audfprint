@@ -351,6 +351,22 @@ class HashTable(object):
         self.dirty = True
         print("Removed", name, "(", hashes_removed, "hashes).")
 
+    def retrieve(self, name):
+        """Return a list of (time, hash) pairs by finding them in the table."""
+        timehashpairs = []
+        id_ = self.name_to_id(name)
+        maxtimemask = (1 << self.maxtimebits) - 1
+        # Still a bug for id_ 0.
+        hashes_containing_id = np.nonzero(
+            np.max((self.table >> self.maxtimebits) == id_, axis=1))[0]
+        for hash_ in hashes_containing_id:
+            entries = self.table[hash_, :self.counts[hash_]]
+            matching_entries = np.nonzero(
+                (entries >> self.maxtimebits) == id_)[0]
+            times = (entries[matching_entries] & maxtimemask)
+            timehashpairs.extend([(time, hash_) for time in times])
+        return timehashpairs
+
     def list(self, print_fn=None):
         """ List all the known items. """
         if not print_fn:

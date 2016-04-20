@@ -88,6 +88,8 @@ class Matcher(object):
         self.find_time_range = False
         # Quantile of time range to report.
         self.time_quantile = 0.02
+        # Display pre-emphasized spectrogram in illustrate_match?
+        self.illustrate_hpf = False
 
     def _best_count_ids(self, hits, ht):
         """ Return the indexes for the ids with the best counts.
@@ -149,14 +151,16 @@ class Matcher(object):
         return min_time, max_time
 
     def _exact_match_counts(self, hits, ids, rawcounts, hashesfor=None):
-        """ Find the number of "filtered" (time-consistent) matching
-            hashes for each of the promising ids in <ids>.  Return an
-            np.array whose rows are [id, filtered_count, modal_time_skew,
-            unfiltered_count, original_rank].  Results are sorted by
-            original rank (but will not in general include all the the
-            original IDs).  There can be multiple rows for a single
-            ID, if there are several distinct time_skews giving good
-            matches. """
+        """Find the number of "filtered" (time-consistent) matching hashes
+            for each of the promising ids in <ids>.  Return an
+            np.array whose rows are [id, filtered_count,
+            modal_time_skew, unfiltered_count, original_rank,
+            min_time, max_time].  Results are sorted by original rank
+            (but will not in general include all the the original
+            IDs).  There can be multiple rows for a single ID, if
+            there are several distinct time_skews giving good
+            matches.
+        """
         # Slower, old process for exact match counts
         allids = hits[:, 0]
         alltimes = hits[:, 1]
@@ -201,7 +205,8 @@ class Matcher(object):
           rawcounts: list giving the actual raw counts for each id to try.
 
         Returns:
-            Rows of [id, filt_count, time_skew, raw_count, orig_rank].
+            Rows of [id, filt_count, time_skew, raw_count, orig_rank, 
+            min_time, max_time].
             Ids occur in the same order as the input list, but ordering
             of (potentially multiple) hits within each track may not be
             sorted (they are sorted by the largest single count value, not
@@ -256,7 +261,8 @@ class Matcher(object):
 
     def match_hashes(self, ht, hashes, hashesfor=None):
         """ Match audio against fingerprint hash table.
-            Return top N matches as (id, filteredmatches, timoffs, rawmatches)
+            Return top N matches as (id, filteredmatches, timoffs, rawmatches, 
+            origrank, mintime, maxtime)
             If hashesfor specified, return the actual matching hashes for that
             hit (0=top hit).
         """
