@@ -4,6 +4,7 @@ audfprint
 Landmark-based audio fingerprinting.
 
 ```
+Landmark-based audio fingerprinting.
 Create a new fingerprint dbase with "new",
 append new files to an existing database with "add",
 or identify noisy query excerpts with "match".
@@ -11,11 +12,9 @@ or identify noisy query excerpts with "match".
 with precomputed fingerprint for each input wav file.
 "merge" combines previously-created databases into
 an existing database; "newmerge" combines existing
-databases to create a new one. 
-"remove" removes the named file(s) from the database.
-"list" prints out all files in database.
+databases to create a new one.
 
-Usage: audfprint (new | add | match | precompute | merge | newmerge | remove | list) [options] <file>...
+Usage: audfprint (new | add | match | precompute | merge | newmerge | list | remove) [options] [<file>]...
 
 Options:
   -d <dbase>, --dbase <dbase>     Fingerprint database file
@@ -23,6 +22,7 @@ Options:
   -h <bits>, --hashbits <bits>    How many bits in each hash [default: 20]
   -b <val>, --bucketsize <val>    Number of entries per bucket [default: 100]
   -t <val>, --maxtime <val>       Largest time value stored [default: 16384]
+  -u <val>, --maxtimebits <val>   maxtime as a number of bits (16384 == 14 bits)
   -r <val>, --samplerate <val>    Resample input files to this [default: 11025]
   -p <dir>, --precompdir <dir>    Save precomputed files under this dir [default: .]
   -i <val>, --shifts <val>        Use this many subframe shifts building fp [default: 0]
@@ -30,6 +30,8 @@ Options:
   -N <val>, --min-count <val>     Minimum number of matching landmarks to count as a match [default: 5]
   -x <val>, --max-matches <val>   Maximum number of matches to report for each query [default: 1]
   -X, --exact-count               Flag to use more precise (but slower) match counting
+  -R, --find-time-range           Report the time support of each match
+  -Q, --time-quantile <val>       Quantile at extremes of time support [default: 0.05]
   -S <val>, --freq-sd <val>       Frequency peak spreading SD in bins [default: 30.0]
   -F <val>, --fanout <val>        Max number of hash pairs per peak [default: 3]
   -P <val>, --pks-per-frame <val>  Maximum number of peaks per frame [default: 5]
