@@ -222,8 +222,8 @@ class Matcher(object):
         if not hits.size:
             # No hits found, return empty results
             return results
-        allids = hits[:, 0]
-        alltimes = hits[:, 1]
+        allids = hits[:, 0].astype(int)
+        alltimes = hits[:, 1].astype(int)
         # Make sure every value in alltimes is >=0 for bincount
         mintime = np.amin(alltimes)
         alltimes -= mintime
