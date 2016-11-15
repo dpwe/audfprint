@@ -234,6 +234,8 @@ class Matcher(object):
         min_time = 0
         max_time = 0
         for urank, (id, rawcount) in enumerate(zip(ids, rawcounts)):
+            # Make sure id is an int64 before shifting it up.
+            id = int(id)
             # Select the subrange of bincounts corresponding to this id
             bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
             still_looking = True
@@ -247,7 +249,7 @@ class Matcher(object):
                                          (mode + self.window + 1)])
                 if self.find_time_range:
                     min_time, max_time = self._calculate_time_ranges(
-                        hits, id, mode)
+                        hits, id, mode + mintime)
                 results[nresults, :] = [id, count, mode + mintime, rawcount,
                                         urank, min_time, max_time]
                 nresults += 1
