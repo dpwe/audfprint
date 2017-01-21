@@ -76,3 +76,7 @@ precompdir_mu: audfprint.py audfprint_analyze.py audfprint_match.py hash_table.p
 	mkdir precompdir_mu
 	${AUDFPRINT} precompute --ncores 4 --precompdir precompdir_mu Nine_Lives/*.mp3
 	${AUDFPRINT} precompute --ncores 4 --precompdir precompdir_mu --shifts 4 query.mp3 query.mp3 query.mp3 query.mp3 query.mp3 query.mp3
+
+test_hash_mask: 
+	${AUDFPRINT} new --dbase fpdbase.pklz --hashbits 16 Nine_Lives/*.mp3
+	${AUDFPRINT} match --dbase fpdbase.pklz query.mp3

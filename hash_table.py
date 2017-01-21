@@ -94,13 +94,13 @@ class HashTable(object):
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
         idval = id_ << self.maxtimebits
         for time_, hash_ in sortedpairs:
+            # Keep only the bottom part of the hash value
+            hash_ &= hashmask
             # How many already stored for this hash?
             count = self.counts[hash_]
             # Keep only the bottom part of the time value
             #time_ %= mxtime
             time_ &= timemask
-            # Keep only the bottom part of the hash value
-            hash_ &= hashmask
             # Mixin with ID
             val = (idval + time_) #.astype(np.uint32)
             if count < self.depth:
@@ -129,28 +129,6 @@ class HashTable(object):
         ids = vals >> self.maxtimebits
         return np.c_[ids, vals & maxtimemask].astype(np.int32)
 
-    def get_hits_orig(self, hashes):
-        """ Return np.array of [id, delta_time, hash, time] rows
-            associated with each element in hashes array of [time, hash] rows.
-            This is the original version that actually calls get_entry().
-        """
-        # Allocate to largest possible number of hits
-        hits = np.zeros((np.shape(hashes)[0]*self.depth, 4), np.int32)
-        nhits = 0
-        # Fill in
-        for time_, hash_ in hashes:
-            idstimes = self.get_entry(hash_)
-            nids = np.shape(idstimes)[0]
-            hitrows = nhits + np.arange(nids)
-            hits[hitrows, 0] = idstimes[:, 0]
-            hits[hitrows, 1] = idstimes[:, 1] - time_
-            hits[hitrows, 2] = hash_
-            hits[hitrows, 3] = time_
-            nhits += nids
-        # Discard the excess rows
-        hits.resize( (nhits, 4) )
-        return hits
-
     def get_hits(self, hashes):
         """ Return np.array of [id, delta_time, hash, time] rows
             associated with each element in hashes array of [time, hash] rows.
@@ -161,10 +139,11 @@ class HashTable(object):
         hits = np.zeros((nhashes*self.depth, 4), np.int32)
         nhits = 0
         maxtimemask = (1 << self.maxtimebits) - 1
+        hashmask = (1 << self.hashbits) - 1
         # Fill in
         for ix in xrange(nhashes):
             time_ = hashes[ix][0]
-            hash_ = hashes[ix][1]
+            hash_ = hashmask & hashes[ix][1]
             nids = min(self.depth, self.counts[hash_])
             tabvals = self.table[hash_, :nids]
             hitrows = nhits + np.arange(nids)
