@@ -16,10 +16,11 @@ import scipy.io
 import math
 
 # Current format version
-HT_VERSION = 20140920
+HT_VERSION = 20170724
 # Earliest acceptable version
-HT_COMPAT_VERSION = 20140920
-
+HT_COMPAT_VERSION = 20170724
+# Earliest version that can be updated with load_old
+HT_OLD_COMPAT_VERSION = 20140920
 
 def _bitsfor(maxval):
     """ Convert a maxval into a number of bits (left shift).
@@ -43,7 +44,7 @@ class HashTable(object):
     def __init__(self, filename=None, hashbits=20, depth=100, maxtime=16384):
         """ allocate an empty hash table of the specified size """
         if filename is not None:
-            self.params = self.load(filename)
+            self.load(filename)
         else:
             self.hashbits = hashbits
             self.depth = depth
@@ -92,7 +93,8 @@ class HashTable(object):
         #sortedpairs[:,0] = sortedpairs[:,0] % self.maxtime
         # Keep only the bottom part of the hash value
         #sortedpairs[:,1] = sortedpairs[:,1] & hashmask
-        idval = id_ << self.maxtimebits
+        # The id value is based on (id_ + 1) to avoid an all-zero value.
+        idval = (id_ + 1) << self.maxtimebits
         for time_, hash_ in sortedpairs:
             # Keep only the bottom part of the hash value
             hash_ &= hashmask
@@ -126,7 +128,8 @@ class HashTable(object):
         """
         vals = self.table[hash_, :min(self.depth, self.counts[hash_])]
         maxtimemask = (1 << self.matimebits) - 1
-        ids = vals >> self.maxtimebits
+        # ids we report externally start at 0, but in table they start at 1.
+        ids = (vals >> self.maxtimebits) - 1
         return np.c_[ids, vals & maxtimemask].astype(np.int32)
 
     def get_hits(self, hashes):
@@ -147,7 +150,8 @@ class HashTable(object):
             nids = min(self.depth, self.counts[hash_])
             tabvals = self.table[hash_, :nids]
             hitrows = nhits + np.arange(nids)
-            hits[hitrows, 0] = tabvals >> self.maxtimebits
+            # Make external IDs start from 0.
+            hits[hitrows, 0] = (tabvals >> self.maxtimebits) - 1
             hits[hitrows, 1] = (tabvals & maxtimemask) - time_
             hits[hitrows, 2] = hash_
             hits[hitrows, 3] = time_
@@ -156,7 +160,7 @@ class HashTable(object):
         hits.resize( (nhits, 4) )
         return hits
 
-    def save(self, name, params=None):
+    def save(self, name, params=None, file_object=None):
         """ Save hash table to file <name>,
             including optional addition params
         """
@@ -164,33 +168,45 @@ class HashTable(object):
         if params:
             for key in params:
                 self.params[key] = params[key]
-        with gzip.open(name, 'wb') as f:
-            pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
+        if file_object:
+          f = file_object
+        else:
+          f = gzip.open(name, 'wb')
+        pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         self.dirty = False
         nhashes = sum(self.counts)
-        print("Saved fprints for", sum(n is not None for n in self.names), 
-              "files (", nhashes, "hashes) to", name)
         # Report the proportion of dropped hashes (overfull table)
         dropped = nhashes - sum(np.minimum(self.depth, self.counts))
-        print("Dropped hashes=", dropped, "(%.2f%%)" % (
-            100.0*dropped/max(1, nhashes)))
+        print("Saved fprints for", sum(n is not None for n in self.names),
+              "files (", nhashes, "hashes) to", name, 
+              "(%.2f%% dropped)" % (100.0*dropped/max(1, nhashes)))
 
     def load(self, name):
         """ Read either pklz or mat-format hash table file """
         ext = os.path.splitext(name)[1]
         if ext == '.mat':
-            params = self.load_matlab(name)
+            self.load_matlab(name)
         else:
-            params = self.load_pkl(name)
-        print("Read fprints for", sum(n is not None for n in self.names), 
-              "files (", sum(self.counts), "hashes) from", name)
-        return params
+            self.load_pkl(name)
+        nhashes = sum(self.counts)
+        # Report the proportion of dropped hashes (overfull table)
+        dropped = nhashes - sum(np.minimum(self.depth, self.counts))
+        print("Read fprints for", sum(n is not None for n in self.names),
+              "files (", nhashes, "hashes) from", name,
+              "(%.2f%% dropped)" % (100.0*dropped/max(1, nhashes)))
 
-    def load_pkl(self, name):
-        """ Read hash table values from file <name>, return params """
-        with gzip.open(name, 'rb') as f:
-            temp = pickle.load(f)
-        assert temp.ht_version >= HT_COMPAT_VERSION
+    def load_pkl(self, name, file_object=None):
+        """ Read hash table values from pickle file <name>. """
+        if file_object:
+          f = file_object
+        else:
+          f =  gzip.open(name, 'rb')
+        temp = pickle.load(f)
+        if temp.ht_version < HT_OLD_COMPAT_VERSION:
+          raise ValueError('Version of ' + name + ' is ' + str(temp.ht_version)
+                           + ' which is not at least ' +
+                           str(HT_OLD_COMPAT_VERSION))
+        # assert temp.ht_version >= HT_COMPAT_VERSION
         params = temp.params
         self.hashbits = temp.hashbits
         self.depth = temp.depth
@@ -198,20 +214,29 @@ class HashTable(object):
             self.maxtimebits = temp.maxtimebits
         else:
             self.maxtimebits = _bitsfor(temp.maxtime)
+        if temp.ht_version < HT_COMPAT_VERSION:
+          # Need to upgrade the database.
+          print("Loading database version", temp.ht_version,
+                "in compatibility mode.")
+          # Offset all the nonzero bins with one ID count.
+          temp.table += np.array(1 << self.maxtimebits).astype(np.uint32) * (
+              temp.table != 0)
+          temp.ht_version = HT_VERSION
         self.table = temp.table
+        self.ht_version = temp.ht_version
         self.counts = temp.counts
         self.names = temp.names
         self.hashesperid = np.array(temp.hashesperid).astype(np.uint32)
-        self.ht_version = temp.ht_version
         self.dirty = False
-        return params
+        self.params = params
 
     def load_matlab(self, name):
         """ Read hash table from version saved by Matlab audfprint.
         :params:
           name : str
             filename of .mat matlab fp dbase file
-        :returns:
+        :side_effects:
+          Sets up attributes of self including
           params : dict
             dictionary of parameters from the Matlab file including
               'mat_version' : float
@@ -238,14 +263,11 @@ class HashTable(object):
         self.names = [str(val[0]) if len(val) > 0 else []
                       for val in mht['HashTableNames'][0]]
         self.hashesperid = np.array(mht['HashTableLengths'][0]).astype(uint32)
-        # Matlab uses 1-origin for the IDs in the hashes, so rather than
-        # rewrite them all, we shift the corresponding decode tables
-        # down one cell
-        self.names.insert(0, '')
-        self.hashesperid = np.append([0], self.hashesperid)
+        # Matlab uses 1-origin for the IDs in the hashes, but the Python code
+        # also skips using id_ 0, so that names[0] corresponds to id_ 1.
         # Otherwise unmodified database
         self.dirty = False
-        return params
+        self.params = params
 
     def totalhashes(self):
         """ Return the total count of hashes stored in the table """
@@ -260,7 +282,7 @@ class HashTable(object):
         #size = len(self.counts)
         self.names += ht.names
         self.hashesperid = np.append(self.hashesperid, ht.hashesperid)
-        # All the table values need to be increased by the ncurrent
+        # Shift all the IDs in the second table down by ncurrent
         idoffset = (1 << self.maxtimebits) * ncurrent
         for hash_ in np.nonzero(ht.counts)[0]:
             allvals = np.r_[self.table[hash_, :self.counts[hash_]],
@@ -287,7 +309,7 @@ class HashTable(object):
 
     def name_to_id(self, name, add_if_missing=False):
         """ Lookup name in the names list, or optionally add. """
-        if type(name) is str:
+        if isinstance(name, basestring):
             # lookup name or assign new
             if name not in self.names:
                 if not add_if_missing:
@@ -309,18 +331,14 @@ class HashTable(object):
     def remove(self, name):
         """ Remove all data for named entity from the hash table. """
         id_ = self.name_to_id(name)
-        # If we happen to be removing the first item (id_ == 0), this will 
-        # match every empty entry in table.  This is very inefficient, but 
-        # it still works, and it's just one ID.  We could have fixed it by 
-        # making the IDs written in to table start an 1, but that would mess 
-        # up backwards compatibility.
-        id_in_table = (self.table >> self.maxtimebits) == id_
+        # Top nybbles of table entries are id_ + 1 (to avoid all-zero entries)
+        id_in_table = (self.table >> self.maxtimebits) == id_ + 1
         hashes_removed = 0
         for hash_ in np.nonzero(np.max(id_in_table, axis=1))[0]:
             vals = self.table[hash_, :self.counts[hash_]]
-            vals = [v for v, x in zip(vals, id_in_table[hash_]) 
+            vals = [v for v, x in zip(vals, id_in_table[hash_])
                     if not x]
-            self.table[hash_] = np.hstack([vals, 
+            self.table[hash_] = np.hstack([vals,
                                            np.zeros(self.depth - len(vals))])
             # This will forget how many extra hashes we had dropped until now.
             self.counts[hash_] = len(vals)
@@ -335,13 +353,12 @@ class HashTable(object):
         timehashpairs = []
         id_ = self.name_to_id(name)
         maxtimemask = (1 << self.maxtimebits) - 1
-        # Still a bug for id_ 0.
         hashes_containing_id = np.nonzero(
-            np.max((self.table >> self.maxtimebits) == id_, axis=1))[0]
+            np.max((self.table >> self.maxtimebits) == id_ + 1, axis=1))[0]
         for hash_ in hashes_containing_id:
             entries = self.table[hash_, :self.counts[hash_]]
             matching_entries = np.nonzero(
-                (entries >> self.maxtimebits) == id_)[0]
+                (entries >> self.maxtimebits) == id_ + 1)[0]
             times = (entries[matching_entries] & maxtimemask)
             timehashpairs.extend([(time, hash_) for time in times])
         return timehashpairs
