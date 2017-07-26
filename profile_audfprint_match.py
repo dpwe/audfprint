@@ -2,7 +2,7 @@ import audfprint
 import cProfile
 import pstats
 
-argv = ["audfprint", "match", "-d", "tmp.fpdb", "--density", "200", "query.mp3", "query2.mp3"]
+argv = ["audfprint", "match", "-d", "fpdbase.pklz", "--density", "200", "query.mp3"]
 
 cProfile.run('audfprint.main(argv)', 'fpmstats')
 
