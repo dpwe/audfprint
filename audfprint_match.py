@@ -230,14 +230,16 @@ class Matcher(object):
         nresults = 0
         # Hash IDs and times together, so only a single bincount
         timebits = max(1, encpowerof2(np.amax(alltimes)))
-        allbincounts = np.bincount((allids << timebits) + alltimes)
+        #allbincounts = np.bincount((allids << timebits) + alltimes)
+        #log("len(allbincounts)=%d" % len(allbincounts))
         min_time = 0
         max_time = 0
         for urank, (id, rawcount) in enumerate(zip(ids, rawcounts)):
             # Make sure id is an int64 before shifting it up.
             id = int(id)
             # Select the subrange of bincounts corresponding to this id
-            bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
+            #bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
+            bincounts = np.bincount(alltimes[allids==id])
             still_looking = True
             while still_looking:
                 mode = np.argmax(bincounts)
