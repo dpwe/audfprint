@@ -77,17 +77,27 @@ DF_MASK = (1 << DF_BITS) - 1
 DF_SHIFT = DT_BITS
 DT_MASK = (1 << DT_BITS) - 1
 
+
+def landmarks2hashes_old(landmarks):
+    return [(time_, ((bin1 & B1_MASK) << B1_SHIFT)
+             | (((bin2 - bin1) & DF_MASK) << DF_SHIFT)
+             | (dtime & DT_MASK))
+            for time_, bin1, bin2, dtime in landmarks]
+
+
 def landmarks2hashes(landmarks):
     """Convert a list of (time, bin1, bin2, dtime) landmarks
     into a list of (time, hash) pairs where the hash combines
     the three remaining values.
     """
-    # build up and return the list of hashed values
-    return [(time_,
-             (((bin1 & B1_MASK) << B1_SHIFT)
-              | (((bin2 - bin1) & DF_MASK) << DF_SHIFT)
-              | (dtime & DT_MASK)))
-            for time_, bin1, bin2, dtime in landmarks]
+    landmarks = np.array(landmarks)
+    hashes = np.hstack([landmarks[:, 0],
+                        ((landmarks[:, 1] & B1_MASK) << B1_SHIFT)
+                        | (((landmarks[:, 2] - landmarks[:, 1]) & DF_MASK)
+                           << DF_SHIFT)
+                        | (landmarks[:, 3] & DT_MASK)]).reshape((-1, 2))
+    return hashes
+
 
 def hashes2landmarks(hashes):
     """Convert the mashed-up landmarks in hashes back into a list
@@ -399,14 +409,28 @@ class Analyzer(object):
                 peaklists = peaks
                 query_hashes = []
                 for peaklist in peaklists:
-                    query_hashes += landmarks2hashes(
-                        self.peaks2landmarks(peaklist)
-                    )
+                    #query_hashes += landmarks2hashes_old(self.peaks2landmarks(peaklist))
+                    query_hashes.append(landmarks2hashes(
+                        self.peaks2landmarks(peaklist)))
+                query_hashes = np.concatenate(query_hashes)
             else:
                 query_hashes = landmarks2hashes(self.peaks2landmarks(peaks))
 
-            # remove duplicate elements by pushing through a set
-            hashes = sorted(list(set(query_hashes)))
+            # Remove duplicates by merging each row into a single value.
+            hashes_hashes = (((query_hashes[:, 0].astype(np.uint64)) << 32) 
+                             + query_hashes[:, 1].astype(np.uint64))
+            unique_hash_hash = np.sort(np.unique(hashes_hashes))
+            unique_hashes = (np.vstack([
+                unique_hash_hash >> 32, 
+                unique_hash_hash & ((1<<32) - 1)
+            ]).astype(np.uint32).reshape((2, -1))).transpose()
+            #u_hashes = np.array(sorted(list(set([(time, hash) for time, hash in query_hashes]))))
+            #print(query_hashes.shape, unique_hashes.shape, u_hashes.shape)
+            #print(unique_hashes[:5], u_hashes[:5])
+            #assert (unique_hashes == u_hashes).all()
+            #hashes = [(time, hash) for time, hash in unique_hashes]
+            hashes = unique_hashes
+            # Or simply np.unique(query_hashes, axis=0) for numpy >= 1.13
 
         #print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
