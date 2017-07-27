@@ -301,13 +301,13 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        log("nhashes=%d" % np.shape(hashes)[0])
+        #log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
 
         bestids, rawcounts = self._best_count_ids(hits, ht)
 
-        log("len(rawcounts)=%d max(rawcounts)=%d" %
-            (len(rawcounts), max(rawcounts)))
+        #log("len(rawcounts)=%d max(rawcounts)=%d" %
+        #    (len(rawcounts), max(rawcounts)))
         if not self.exact_count:
             results = self._approx_match_counts(hits, bestids, rawcounts)
         else:
