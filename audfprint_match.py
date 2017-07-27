@@ -49,6 +49,13 @@ def locmax(vec, indices=False):
     else:
         return maxmask
 
+def keep_local_maxes(vec):
+    """ Zero out values unless they are local maxima."""
+    local_maxes = np.zeros(vec.shape)
+    locmaxindices = locmax(vec, indices=True)
+    local_maxes[locmaxindices] = vec[locmaxindices]
+    return local_maxes
+
 def find_modes(data, threshold=5, window=0):
     """ Find multiple modes in data,  Report a list of (mode, count)
         pairs for every mode greater than or equal to threshold.
@@ -90,6 +97,9 @@ class Matcher(object):
         self.time_quantile = 0.02
         # Display pre-emphasized spectrogram in illustrate_match?
         self.illustrate_hpf = False
+        # If there are a lot of matches within a single track at different
+        # alignments, stop looking after a while.
+        self.max_alignments_per_id = 100
 
     def _best_count_ids(self, hits, ht):
         """ Return the indexes for the ids with the best counts.
@@ -141,13 +151,23 @@ class Matcher(object):
         return matchhashes
 
     def _calculate_time_ranges(self, hits, id, mode):
-        """Given the id and mode, return the actual time support."""
-        match_times = sorted(hits[row, 3]
-                             for row in np.nonzero(hits[:, 0]==id)[0]
-                             if mode - self.window <= hits[row, 1]
-                             and hits[row, 1] <= mode + self.window)
+        """Given the id and mode, return the actual time support.
+           hits is an np.array of id, skew_time, hash, orig_time
+           which must be sorted in orig_time order."""
+        minoffset = mode - self.window
+        maxoffset = mode + self.window
+        #match_times = sorted(hits[row, 3]
+        #                     for row in np.nonzero(hits[:, 0]==id)[0]
+        #                     if mode - self.window <= hits[row, 1]
+        #                     and hits[row, 1] <= mode + self.window)
+        match_times = hits[np.logical_and(hits[:, 1] >= minoffset, 
+                                          hits[:, 1] <= maxoffset), 3]
         min_time = match_times[int(len(match_times)*self.time_quantile)]
         max_time = match_times[int(len(match_times)*(1.0 - self.time_quantile)) - 1]
+        #log("_calc_time_ranges: len(hits)={:d} id={:d} mode={:d} matches={:d} min={:d} max={:d}".format(
+        #    len(hits), id, mode, np.sum(np.logical_and(hits[:, 1] >= minoffset,
+        #                                               hits[:, 1] <= maxoffset)),
+        #    min_time, max_time))
         return min_time, max_time
 
     def _exact_match_counts(self, hits, ids, rawcounts, hashesfor=None):
@@ -161,11 +181,13 @@ class Matcher(object):
             there are several distinct time_skews giving good
             matches.
         """
+        # Sort hits into time_in_original order - needed for _calc_time_range
+        sorted_hits = hits[hits[:, 3].argsort()]
         # Slower, old process for exact match counts
-        allids = hits[:, 0]
-        alltimes = hits[:, 1]
-        allhashes = hits[:, 2]
-        #allotimes = hits[:, 3]
+        allids = sorted_hits[:, 0]
+        alltimes = sorted_hits[:, 1]
+        allhashes = sorted_hits[:, 2]
+        #allotimes = sorted_hits[:, 3]
         # Allocate enough space initially for 4 modes per hit
         maxnresults = len(ids) * 4
         results = np.zeros((maxnresults, 7), np.int32)
@@ -177,7 +199,7 @@ class Matcher(object):
                                        window=self.window,
                                        threshold=self.threshcount)
             for mode in modes:
-                matchhashes = self._unique_match_hashes(id, hits, mode)
+                matchhashes = self._unique_match_hashes(id, sorted_hits, mode)
                 # Now we get the exact count
                 filtcount = len(matchhashes)
                 if filtcount >= self.threshcount:
@@ -187,7 +209,7 @@ class Matcher(object):
                         results.resize((maxnresults, results.shape[1]))
                     if self.find_time_range:
                         min_time, max_time = self._calculate_time_ranges(
-                            hits, id, mode)
+                            sorted_hits, id, mode)
                     results[nresults, :] = [id, filtcount, mode, rawcount,
                                             urank, min_time, max_time]
                     nresults += 1
@@ -200,7 +222,7 @@ class Matcher(object):
 
         Args:
           hits: np.array of hash matches, each row consists of
-            <track_id, skew_time, ...>.
+            <track_id, skew_time, hash, orig_time>.
           ids: list of the IDs to check, based on raw match count.
           rawcounts: list giving the actual raw counts for each id to try.
 
@@ -222,8 +244,10 @@ class Matcher(object):
         if not hits.size:
             # No hits found, return empty results
             return results
-        allids = hits[:, 0].astype(int)
-        alltimes = hits[:, 1].astype(int)
+        # Sort hits into time_in_original order - needed for _calc_time_range
+        sorted_hits = hits[hits[:, 3].argsort()]
+        allids = sorted_hits[:, 0].astype(int)
+        alltimes = sorted_hits[:, 1].astype(int)
         # Make sure every value in alltimes is >=0 for bincount
         mintime = np.amin(alltimes)
         alltimes -= mintime
@@ -241,9 +265,12 @@ class Matcher(object):
             #bincounts = allbincounts[(id << timebits):(((id+1)<<timebits)-1)]
             bincounts = np.bincount(alltimes[allids==id])
             still_looking = True
+            # Only consider legit local maxima in bincounts.
+            filtered_bincounts = keep_local_maxes(bincounts)
+            found_this_id = 0
             while still_looking:
-                mode = np.argmax(bincounts)
-                if bincounts[mode] <= self.threshcount:
+                mode = np.argmax(filtered_bincounts)
+                if filtered_bincounts[mode] <= self.threshcount:
                     # Too few - skip to the next id
                     still_looking = False
                     continue
@@ -251,7 +278,7 @@ class Matcher(object):
                                          (mode + self.window + 1)])
                 if self.find_time_range:
                     min_time, max_time = self._calculate_time_ranges(
-                        hits, id, mode + mintime)
+                        sorted_hits, id, mode + mintime)
                 results[nresults, :] = [id, count, mode + mintime, rawcount,
                                         urank, min_time, max_time]
                 nresults += 1
@@ -259,8 +286,11 @@ class Matcher(object):
                     results = np.vstack([results, np.zeros(results.shape,
                                                            np.int32)])
                 # Clear this hit to find next largest.
-                bincounts[max(0, mode - self.window):
-                          (mode + self.window + 1)] = 0
+                filtered_bincounts[max(0, mode - self.window):
+                                   (mode + self.window + 1)] = 0
+                found_this_id += 1
+                if found_this_id > self.max_alignments_per_id:
+                    still_looking = False
         return results[:nresults, :]
 
     def match_hashes(self, ht, hashes, hashesfor=None):
@@ -271,13 +301,13 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        #log("nhashes=%d" % np.shape(hashes)[0])
+        log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
 
         bestids, rawcounts = self._best_count_ids(hits, ht)
 
-        #log("len(rawcounts)=%d max(bestcountsixs)=%d" %
-        #    (len(rawcounts), max(bestcountsixs)))
+        log("len(rawcounts)=%d max(rawcounts)=%d" %
+            (len(rawcounts), max(rawcounts)))
         if not self.exact_count:
             results = self._approx_match_counts(hits, bestids, rawcounts)
         else:
