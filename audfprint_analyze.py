@@ -78,13 +78,6 @@ DF_SHIFT = DT_BITS
 DT_MASK = (1 << DT_BITS) - 1
 
 
-def landmarks2hashes_old(landmarks):
-    return [(time_, ((bin1 & B1_MASK) << B1_SHIFT)
-             | (((bin2 - bin1) & DF_MASK) << DF_SHIFT)
-             | (dtime & DT_MASK))
-            for time_, bin1, bin2, dtime in landmarks]
-
-
 def landmarks2hashes(landmarks):
     """Convert a list of (time, bin1, bin2, dtime) landmarks
     into a list of (time, hash) pairs where the hash combines
@@ -409,7 +402,6 @@ class Analyzer(object):
                 peaklists = peaks
                 query_hashes = []
                 for peaklist in peaklists:
-                    #query_hashes += landmarks2hashes_old(self.peaks2landmarks(peaklist))
                     query_hashes.append(landmarks2hashes(
                         self.peaks2landmarks(peaklist)))
                 query_hashes = np.concatenate(query_hashes)
@@ -424,11 +416,6 @@ class Analyzer(object):
                 unique_hash_hash >> 32, 
                 unique_hash_hash & ((1<<32) - 1)
             ]).astype(np.uint32).reshape((2, -1))).transpose()
-            #u_hashes = np.array(sorted(list(set([(time, hash) for time, hash in query_hashes]))))
-            #print(query_hashes.shape, unique_hashes.shape, u_hashes.shape)
-            #print(unique_hashes[:5], u_hashes[:5])
-            #assert (unique_hashes == u_hashes).all()
-            #hashes = [(time, hash) for time, hash in unique_hashes]
             hashes = unique_hashes
             # Or simply np.unique(query_hashes, axis=0) for numpy >= 1.13
 
