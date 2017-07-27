@@ -84,11 +84,12 @@ def landmarks2hashes(landmarks):
     the three remaining values.
     """
     landmarks = np.array(landmarks)
-    hashes = np.hstack([landmarks[:, 0],
-                        ((landmarks[:, 1] & B1_MASK) << B1_SHIFT)
-                        | (((landmarks[:, 2] - landmarks[:, 1]) & DF_MASK)
-                           << DF_SHIFT)
-                        | (landmarks[:, 3] & DT_MASK)]).reshape((-1, 2))
+    hashes = np.zeros((landmarks.shape[0], 2), dtype=np.int32)
+    hashes[:, 0] = landmarks[:, 0]
+    hashes[:, 1] = (((landmarks[:, 1] & B1_MASK) << B1_SHIFT)
+                    | (((landmarks[:, 2] - landmarks[:, 1]) & DF_MASK)
+                       << DF_SHIFT)
+                    | (landmarks[:, 3] & DT_MASK))
     return hashes
 
 
@@ -412,10 +413,10 @@ class Analyzer(object):
             hashes_hashes = (((query_hashes[:, 0].astype(np.uint64)) << 32)
                              + query_hashes[:, 1].astype(np.uint64))
             unique_hash_hash = np.sort(np.unique(hashes_hashes))
-            unique_hashes = (np.vstack([
-                unique_hash_hash >> 32,
-                unique_hash_hash & ((1<<32) - 1)
-            ]).astype(np.uint32).reshape((2, -1))).transpose()
+            unique_hashes = np.hstack([
+                (unique_hash_hash >> 32)[:, np.newaxis],
+                (unique_hash_hash & ((1<<32) - 1))[:, np.newaxis]
+            ]).astype(np.int32)
             hashes = unique_hashes
             # Or simply np.unique(query_hashes, axis=0) for numpy >= 1.13
 
