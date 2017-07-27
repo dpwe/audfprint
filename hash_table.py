@@ -349,18 +349,22 @@ class HashTable(object):
         print("Removed", name, "(", hashes_removed, "hashes).")
 
     def retrieve(self, name):
-        """Return a list of (time, hash) pairs by finding them in the table."""
-        timehashpairs = []
+        """Return an np.array of (time, hash) pairs found in the table."""
         id_ = self.name_to_id(name)
         maxtimemask = (1 << self.maxtimebits) - 1
-        hashes_containing_id = np.nonzero(
-            np.max((self.table >> self.maxtimebits) == id_ + 1, axis=1))[0]
+        num_hashes_per_hash = np.sum(
+            (self.table >> self.maxtimebits) == (id_ + 1), axis=1)
+        hashes_containing_id = np.nonzero(num_hashes_per_hash)[0]
+        timehashpairs = np.zeros((sum(num_hashes_per_hash), 2), dtype=np.int32)
+        hashes_so_far = 0
         for hash_ in hashes_containing_id:
             entries = self.table[hash_, :self.counts[hash_]]
             matching_entries = np.nonzero(
-                (entries >> self.maxtimebits) == id_ + 1)[0]
+                (entries >> self.maxtimebits) == (id_ + 1))[0]
             times = (entries[matching_entries] & maxtimemask)
-            timehashpairs.extend([(time, hash_) for time in times])
+            timehashpairs[hashes_so_far : hashes_so_far + len(times), 0] = times
+            timehashpairs[hashes_so_far : hashes_so_far + len(times), 1] = hash_
+            hashes_so_far += len(times)
         return timehashpairs
 
     def list(self, print_fn=None):
