@@ -44,7 +44,7 @@ def ensure_dir(dirname):
     """ ensure that the named directory exists """
     if len(dirname):
         if not os.path.exists(dirname):
-            # There's a race condition for multiprocessor; don't worry if the 
+            # There's a race condition for multiprocessor; don't worry if the
             # directory gets created before we get to it.
             try:
                 os.makedirs(dirname)
@@ -57,11 +57,11 @@ def ensure_dir(dirname):
 
 def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
                                     precompext=None, hashes_not_peaks=True,
-                                    skip_existing=False, 
+                                    skip_existing=False,
                                     strip_prefix=None):
     """ Perform precompute action for one file, return list
         of message strings """
-    # If strip_prefix is specified and matches the start of filename, 
+    # If strip_prefix is specified and matches the start of filename,
     # remove it from filename.
     if strip_prefix and filename[:len(strip_prefix)] == strip_prefix:
         tail_filename = filename[len(strip_prefix):]
@@ -110,7 +110,7 @@ def file_precompute(analyzer, filename, precompdir, type='peaks', skip_existing=
     hashes_not_peaks = (type=='hashes')
     return file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
                                            hashes_not_peaks=hashes_not_peaks,
-                                           skip_existing=skip_existing, 
+                                           skip_existing=skip_existing,
                                            strip_prefix=strip_prefix)
 
 def make_ht_from_list(analyzer, filelist, hashbits, depth, maxtime, pipe=None):
@@ -224,7 +224,7 @@ def matcher_file_match_to_msgs(matcher, analyzer, hash_tab, filename):
     return matcher.file_match_to_msgs(analyzer, hash_tab, filename)
 
 def do_cmd_multiproc(cmd, analyzer, hash_tab, filename_iter, matcher,
-                     outdir, type, report, skip_existing=False, 
+                     outdir, type, report, skip_existing=False,
                      strip_prefix=None, ncores=1):
     """ Run the actual command, using multiple processors """
     if cmd == 'precompute':
@@ -372,7 +372,7 @@ def main(argv):
     args = docopt.docopt(USAGE, version=__version__, argv=argv[1:])
 
     # Figure which command was chosen
-    poss_cmds = ['new', 'add', 'precompute', 'merge', 'newmerge', 'match', 
+    poss_cmds = ['new', 'add', 'precompute', 'merge', 'newmerge', 'match',
                  'list', 'remove']
     cmdlist = [cmdname
                for cmdname in poss_cmds
@@ -397,7 +397,7 @@ def main(argv):
 
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if not (
-        cmd is "merge" or cmd is "newmerge" 
+        cmd is "merge" or cmd is "newmerge"
         or cmd is "list" or cmd is "remove") else None
 
     precomp_type = 'hashes'
@@ -456,12 +456,12 @@ def main(argv):
                          matcher, args['--precompdir'],
                          precomp_type, report,
                          skip_existing=args['--skip-existing'],
-                         strip_prefix=args['--wavdir'], 
+                         strip_prefix=args['--wavdir'],
                          ncores=ncores)
     else:
         do_cmd(cmd, analyzer, hash_tab, filename_iter,
                matcher, args['--precompdir'], precomp_type, report,
-               skip_existing=args['--skip-existing'], 
+               skip_existing=args['--skip-existing'],
                strip_prefix=args['--wavdir'])
 
     elapsedtime = time.clock() - initticks

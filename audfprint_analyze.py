@@ -409,11 +409,11 @@ class Analyzer(object):
                 query_hashes = landmarks2hashes(self.peaks2landmarks(peaks))
 
             # Remove duplicates by merging each row into a single value.
-            hashes_hashes = (((query_hashes[:, 0].astype(np.uint64)) << 32) 
+            hashes_hashes = (((query_hashes[:, 0].astype(np.uint64)) << 32)
                              + query_hashes[:, 1].astype(np.uint64))
             unique_hash_hash = np.sort(np.unique(hashes_hashes))
             unique_hashes = (np.vstack([
-                unique_hash_hash >> 32, 
+                unique_hash_hash >> 32,
                 unique_hash_hash & ((1<<32) - 1)
             ]).astype(np.uint32).reshape((2, -1))).transpose()
             hashes = unique_hashes

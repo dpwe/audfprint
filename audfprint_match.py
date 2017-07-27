@@ -160,7 +160,7 @@ class Matcher(object):
         #                     for row in np.nonzero(hits[:, 0]==id)[0]
         #                     if mode - self.window <= hits[row, 1]
         #                     and hits[row, 1] <= mode + self.window)
-        match_times = hits[np.logical_and(hits[:, 1] >= minoffset, 
+        match_times = hits[np.logical_and(hits[:, 1] >= minoffset,
                                           hits[:, 1] <= maxoffset), 3]
         min_time = match_times[int(len(match_times)*self.time_quantile)]
         max_time = match_times[int(len(match_times)*(1.0 - self.time_quantile)) - 1]
@@ -227,7 +227,7 @@ class Matcher(object):
           rawcounts: list giving the actual raw counts for each id to try.
 
         Returns:
-            Rows of [id, filt_count, time_skew, raw_count, orig_rank, 
+            Rows of [id, filt_count, time_skew, raw_count, orig_rank,
             min_time, max_time].
             Ids occur in the same order as the input list, but ordering
             of (potentially multiple) hits within each track may not be
@@ -295,7 +295,7 @@ class Matcher(object):
 
     def match_hashes(self, ht, hashes, hashesfor=None):
         """ Match audio against fingerprint hash table.
-            Return top N matches as (id, filteredmatches, timoffs, rawmatches, 
+            Return top N matches as (id, filteredmatches, timoffs, rawmatches,
             origrank, mintime, maxtime)
             If hashesfor specified, return the actual matching hashes for that
             hit (0=top hit).
