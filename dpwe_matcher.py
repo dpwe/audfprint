@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 # dpwe_matcher.py
 #
@@ -27,10 +28,13 @@
 # ..
 from __future__ import print_function
 
-import sys, os
+import os
+import sys
+
 import audfprint
 
 try:
+    # noinspection PyCompatibility
     from ConfigParser import ConfigParser  # Py2
 except ImportError:
     from configparser import ConfigParser  # Py3
@@ -76,8 +80,8 @@ min_count = config.getint(section, 'min_count')
 ncores = config.getint(section, 'ncores')
 
 print(sys.argv[0], "density:", density, "fanout:", fanout,
-    "search_depth", search_depth, "min_count", min_count,
-    "ncores:", ncores)
+      "search_depth", search_depth, "min_count", min_count,
+      "ncores:", ncores)
 
 # Run the command
 argv = ["audfprint", "match",

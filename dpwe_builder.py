@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 # dpwe_builder.py
 #
@@ -21,10 +22,13 @@
 # The output file(s), which containing all the information of the database to be used for audio fingerprinting, should be placed placed into the directory %dir4db%. The total size of the database file(s) is restricted to a certain amount, as explained next.
 from __future__ import print_function
 
-import sys, os
+import os
+import sys
+
 import audfprint
 
 try:
+    # noinspection PyCompatibility
     from ConfigParser import ConfigParser  # Py2
 except ImportError:
     from configparser import ConfigParser  # Py3

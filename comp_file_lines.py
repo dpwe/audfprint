@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 # comp_file_lines.py
 #
@@ -7,6 +8,8 @@
 from __future__ import print_function
 
 import sys
+
+import numpy as np
 
 verbose = False
 
@@ -42,7 +45,7 @@ else:
         item2s = [val.rstrip("\n") for val in f]
 
 # Now, make a boolean vector of correctness
-import numpy as np
+
 correct = np.zeros(len(item1s), np.float)
 for ix, items in enumerate(zip(item1s, item2s)):
     if items[0] == items[1]:
@@ -51,4 +54,4 @@ for ix, items in enumerate(zip(item1s, item2s)):
         if verbose:
             print(items)
 
-print(int(np.sum(correct)),"correct out of", len(correct), "= %.1f%%" % (100.0*np.mean(correct)))
+print(int(np.sum(correct)), "correct out of", len(correct), "= %.1f%%" % (100.0 * np.mean(correct)))

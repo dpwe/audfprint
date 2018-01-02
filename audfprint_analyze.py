@@ -1,3 +1,4 @@
+# coding=utf-8
 """
 audfprint_analyze.py
 
@@ -8,24 +9,17 @@ Class to do the analysis of wave files into hash constellations.
 
 from __future__ import print_function
 
+import glob  # For glob2hashtable, localtester
 import os
-import numpy as np
-
-import scipy.signal
-
-# For reading/writing hashes to file
-import struct
-
-# For glob2hashtable, localtester
-import glob
-import time
-
-# For utility, glob2hashtable
-import hash_table
+import struct  # For reading/writing hashes to file
+import time  # For glob2hashtable, localtester
 
 import librosa
+import numpy as np
+import scipy.signal
 
 import audio_read
+import hash_table  # For utility, glob2hashtable
 
 try:
     # noinspection PyUnresolvedReferences
@@ -47,9 +41,9 @@ def locmax(vec, indices=False):
         of the boolean vector.
     """
     # vec[-1]-1 means last value can be a peak
-    #nbr = np.greater_equal(np.r_[vec, vec[-1]-1], np.r_[vec[0], vec])
+    # nbr = np.greater_equal(np.r_[vec, vec[-1]-1], np.r_[vec[0], vec])
     # the np.r_ was killing us, so try an optimization...
-    nbr = np.zeros(len(vec)+1, dtype=bool)
+    nbr = np.zeros(len(vec) + 1, dtype=bool)
     nbr[0] = True
     nbr[1:-1] = np.greater_equal(vec[1:], vec[:-1])
     maxmask = (nbr[:-1] & ~nbr[1:])
@@ -58,14 +52,15 @@ def locmax(vec, indices=False):
     else:
         return maxmask
 
+
 # Constants for Analyzer
 # DENSITY controls the density of landmarks found (approx DENSITY per sec)
 DENSITY = 20.0
 # OVERSAMP > 1 tries to generate extra landmarks by decaying faster
 OVERSAMP = 1
 ## 512 pt FFT @ 11025 Hz, 50% hop
-#t_win = 0.0464
-#t_hop = 0.0232
+# t_win = 0.0464
+# t_hop = 0.0232
 # Just specify n_fft
 N_FFT = 512
 N_HOP = 256
@@ -109,9 +104,9 @@ def hashes2landmarks(hashes):
         bin1 = (hash_ >> B1_SHIFT) & B1_MASK
         dbin = (hash_ >> DF_SHIFT) & DF_MASK
         # Sign extend frequency difference
-        if dbin >= (1 << (DF_BITS-1)):
+        if dbin >= (1 << (DF_BITS - 1)):
             dbin -= (1 << DF_BITS)
-        landmarks.append((time_, bin1, bin1+dbin, dtime))
+        landmarks.append((time_, bin1, bin1 + dbin, dtime))
     return landmarks
 
 
@@ -183,20 +178,20 @@ class Analyzer(object):
         else:
             npoints = len(base)
             vec = np.copy(base)
-        #binvals = np.arange(len(vec))
-        #for pos, val in peaks:
+        # binvals = np.arange(len(vec))
+        # for pos, val in peaks:
         #   vec = np.maximum(vec, val*np.exp(-0.5*(((binvals - pos)
         #                                /float(width))**2)))
         if width != self.__sp_width or npoints != self.__sp_len:
             # Need to calculate new vector
             self.__sp_width = width
             self.__sp_len = npoints
-            self.__sp_vals = np.exp(-0.5*((np.arange(-npoints, npoints+1)
-                                           / float(width))**2))
+            self.__sp_vals = np.exp(-0.5 * ((np.arange(-npoints, npoints + 1)
+                                             / float(width)) ** 2))
         # Now the actual function
         for pos, val in peaks:
-            vec = np.maximum(vec, val*self.__sp_vals[np.arange(npoints)
-                                                     + npoints - pos])
+            vec = np.maximum(vec, val * self.__sp_vals[np.arange(npoints)
+                                                       + npoints - pos])
         return vec
 
     def _decaying_threshold_fwd_prune(self, sgram, a_dec):
@@ -205,10 +200,10 @@ class Analyzer(object):
         """
         (srows, scols) = np.shape(sgram)
         sthresh = self.spreadpeaksinvector(
-            np.max(sgram[:, :np.minimum(10, scols)], axis=1), self.f_sd
+                np.max(sgram[:, :np.minimum(10, scols)], axis=1), self.f_sd
         )
         ## Store sthresh at each column, for debug
-        #thr = np.zeros((srows, scols))
+        # thr = np.zeros((srows, scols))
         peaks = np.zeros((srows, scols))
         # optimization of mask update
         __sp_pts = len(sthresh)
@@ -223,12 +218,12 @@ class Analyzer(object):
             valspeaks = sorted(zip(s_col[sdmaxposs], sdmaxposs), reverse=True)
             for val, peakpos in valspeaks[:self.maxpksperframe]:
                 # What we actually want
-                #sthresh = spreadpeaks([(peakpos, s_col[peakpos])],
+                # sthresh = spreadpeaks([(peakpos, s_col[peakpos])],
                 #                      base=sthresh, width=f_sd)
                 # Optimization - inline the core function within spreadpeaks
                 sthresh = np.maximum(sthresh,
-                                     val*__sp_v[(__sp_pts - peakpos):
-                                                (2*__sp_pts - peakpos)])
+                                     val * __sp_v[(__sp_pts - peakpos):
+                                                  (2 * __sp_pts - peakpos)])
                 peaks[peakpos, col] = 1
             sthresh *= a_dec
         return peaks
@@ -239,8 +234,8 @@ class Analyzer(object):
         # Backwards filter to prune peaks
         sthresh = self.spreadpeaksinvector(sgram[:, -1], self.f_sd)
         for col in range(scols, 0, -1):
-            pkposs = np.nonzero(peaks[:, col-1])[0]
-            peakvals = sgram[pkposs, col-1]
+            pkposs = np.nonzero(peaks[:, col - 1])[0]
+            peakvals = sgram[pkposs, col - 1]
             for val, peakpos in sorted(zip(peakvals, pkposs), reverse=True):
                 if val >= sthresh[peakpos]:
                     # Setup the threshold
@@ -251,8 +246,8 @@ class Analyzer(object):
                         peaks[peakpos, col] = 0
                 else:
                     # delete the peak
-                    peaks[peakpos, col-1] = 0
-            sthresh = a_dec*sthresh
+                    peaks[peakpos, col - 1] = 0
+            sthresh = a_dec * sthresh
         return peaks
 
     def find_peaks(self, d, sr):
@@ -277,16 +272,16 @@ class Analyzer(object):
             return []
 
         # masking envelope decay constant
-        a_dec = (1.0 - 0.01*(self.density*np.sqrt(self.n_hop/352.8)/35.0)) \
-                **(1.0/OVERSAMP)
+        a_dec = (1.0 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35.0)) \
+                ** (1.0 / OVERSAMP)
         # Take spectrogram
-        mywin = np.hanning(self.n_fft+2)[1:-1]
+        mywin = np.hanning(self.n_fft + 2)[1:-1]
         sgram = np.abs(librosa.stft(d, n_fft=self.n_fft,
                                     hop_length=self.n_hop,
                                     window=mywin))
         sgrammax = np.max(sgram)
         if sgrammax > 0.0:
-            sgram = np.log(np.maximum(sgram, np.max(sgram)/1e6))
+            sgram = np.log(np.maximum(sgram, np.max(sgram) / 1e6))
             sgram = sgram - np.mean(sgram)
         else:
             # The sgram is identically zero, i.e., the input signal was identically
@@ -295,9 +290,9 @@ class Analyzer(object):
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
         sgram = np.array([scipy.signal.lfilter([1, -1],
-                                               [1, -(HPF_POLE)** \
-                                                (1/OVERSAMP)], s_row)
-                          for s_row in sgram])[:-1,]
+                                               [1, -(HPF_POLE) ** \
+                                                    (1 / OVERSAMP)], s_row)
+                          for s_row in sgram])[:-1, ]
         # Prune to keep only local maxima in spectrum that appear above an online,
         # decaying threshold
         peaks = self._decaying_threshold_fwd_prune(sgram, a_dec)
@@ -309,7 +304,7 @@ class Analyzer(object):
         pklist = []
         for col in xrange(scols):
             for bin in np.nonzero(peaks[:, col])[0]:
-                pklist.append( (col, bin) )
+                pklist.append((col, bin))
         return pklist
 
     def peaks2landmarks(self, pklist):
@@ -333,16 +328,16 @@ class Analyzer(object):
             for col in xrange(scols):
                 for peak in peaks_at[col]:
                     pairsthispeak = 0
-                    for col2 in xrange(col+self.mindt,
-                                       min(scols, col+self.targetdt)):
+                    for col2 in xrange(col + self.mindt,
+                                       min(scols, col + self.targetdt)):
                         if pairsthispeak < self.maxpairsperpeak:
                             for peak2 in peaks_at[col2]:
-                                if abs(peak2-peak) < self.targetdf:
-                                    #and abs(peak2-peak) + abs(col2-col) > 2 ):
+                                if abs(peak2 - peak) < self.targetdf:
+                                    # and abs(peak2-peak) + abs(col2-col) > 2 ):
                                     if pairsthispeak < self.maxpairsperpeak:
                                         # We have a pair!
                                         landmarks.append((col, peak,
-                                                          peak2, col2-col))
+                                                          peak2, col2 - col))
                                         pairsthispeak += 1
 
         return landmarks
@@ -356,27 +351,27 @@ class Analyzer(object):
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
-            dur = np.max(peaks, axis=0)[0]*self.n_hop/float(self.target_sr)
+            dur = np.max(peaks, axis=0)[0] * self.n_hop / float(self.target_sr)
         else:
             try:
-                #[d, sr] = librosa.load(filename, sr=self.target_sr)
+                # [d, sr] = librosa.load(filename, sr=self.target_sr)
                 d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
-            except: # audioread.NoBackendError:
+            except:  # audioread.NoBackendError:
                 message = "wavfile2peaks: Error reading " + filename
                 if self.fail_on_error:
-                  raise IOError(message)
+                    raise IOError(message)
                 print(message, "skipping")
                 d = []
                 sr = self.target_sr
             # Store duration in a global because it's hard to handle
-            dur = float(len(d))/sr
+            dur = float(len(d)) / sr
             if shifts is None or shifts < 2:
                 peaks = self.find_peaks(d, sr);
             else:
                 # Calculate hashes with optional part-frame shifts
                 peaklists = []
                 for shift in range(shifts):
-                    shiftsamps = int(float(shift)/self.shifts*self.n_hop)
+                    shiftsamps = int(float(shift) / self.shifts * self.n_hop)
                     peaklists.append(self.find_peaks(d[shiftsamps:], sr))
                 peaks = peaklists
 
@@ -395,7 +390,7 @@ class Analyzer(object):
         if ext == PRECOMPEXT:
             # short-circuit - precomputed fingerprint file
             hashes = hashes_load(filename)
-            dur = np.max(hashes, axis=0)[0]*self.n_hop/float(self.target_sr)
+            dur = np.max(hashes, axis=0)[0] * self.n_hop / float(self.target_sr)
             # instrumentation to track total amount of sound processed
             self.soundfiledur = dur
             self.soundfiletotaldur += dur
@@ -403,14 +398,14 @@ class Analyzer(object):
         else:
             peaks = self.wavfile2peaks(filename, self.shifts)
             if len(peaks) == 0:
-              return []
+                return []
             # Did we get returned a list of lists of peaks due to shift?
             if isinstance(peaks[0], list):
                 peaklists = peaks
                 query_hashes = []
                 for peaklist in peaklists:
                     query_hashes.append(landmarks2hashes(
-                        self.peaks2landmarks(peaklist)))
+                            self.peaks2landmarks(peaklist)))
                 query_hashes = np.concatenate(query_hashes)
             else:
                 query_hashes = landmarks2hashes(self.peaks2landmarks(peaks))
@@ -421,12 +416,12 @@ class Analyzer(object):
             unique_hash_hash = np.sort(np.unique(hashes_hashes))
             unique_hashes = np.hstack([
                 (unique_hash_hash >> 32)[:, np.newaxis],
-                (unique_hash_hash & ((1<<32) - 1))[:, np.newaxis]
+                (unique_hash_hash & ((1 << 32) - 1))[:, np.newaxis]
             ]).astype(np.int32)
             hashes = unique_hashes
             # Or simply np.unique(query_hashes, axis=0) for numpy >= 1.13
 
-        #print("wavfile2hashes: read", len(hashes), "hashes from", filename)
+        # print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
 
     ########### functions to link to actual hash table index database #######
@@ -444,23 +439,21 @@ class Analyzer(object):
           nhashes : int
             the number of hashes it mapped into
         """
-        #sr = 11025
-        #print("ingest: sr=",sr)
-        #d, sr = librosa.load(filename, sr=sr)
+        # sr = 11025
+        # print("ingest: sr=",sr)
+        # d, sr = librosa.load(filename, sr=sr)
         # librosa.load on mp3 files prepends 396 samples compared
         # to Matlab audioread ??
-        #hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr,
+        # hashes = landmarks2hashes(peaks2landmarks(find_peaks(d, sr,
         #                                                     density=density,
         #                                                     n_fft=n_fft,
         #                                                     n_hop=n_hop)))
         hashes = self.wavfile2hashes(filename)
         hashtable.store(filename, hashes)
-        #return (len(d)/float(sr), len(hashes))
-        #return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
+        # return (len(d)/float(sr), len(hashes))
+        # return (np.max(hashes, axis=0)[0]*n_hop/float(sr), len(hashes))
         # soundfiledur is set up in wavfile2hashes, use result here
         return self.soundfiledur, len(hashes)
-
-
 
 
 ########### functions to read/write hashes to file for a single track #####
@@ -471,12 +464,14 @@ HASH_MAGIC = 'audfprinthashV00'  # 16 chars, FWIW
 PEAK_FMT = '<2i'
 PEAK_MAGIC = 'audfprintpeakV00'  # 16 chars, FWIW
 
+
 def hashes_save(hashfilename, hashes):
     """ Write out a list of (time, hash) pairs as 32 bit ints """
     with open(hashfilename, 'wb') as f:
         f.write(HASH_MAGIC)
         for time_, hash_ in hashes:
             f.write(struct.pack(HASH_FMT, time_, hash_))
+
 
 def hashes_load(hashfilename):
     """ Read back a set of hashes written by hashes_save """
@@ -493,12 +488,14 @@ def hashes_load(hashfilename):
             data = f.read(fmtsize)
     return hashes
 
+
 def peaks_save(peakfilename, peaks):
     """ Write out a list of (time, bin) pairs as 32 bit ints """
     with open(peakfilename, 'wb') as f:
         f.write(PEAK_MAGIC)
         for time_, bin_ in peaks:
             f.write(struct.pack(PEAK_FMT, time_, bin_))
+
 
 def peaks_load(peakfilename):
     """ Read back a set of (time, bin) pairs written by peaks_save """
@@ -515,10 +512,12 @@ def peaks_load(peakfilename):
             data = f.read(fmtsize)
     return peaks
 
+
 ######## function signature for Gordon feature extraction
 ######## which stores the precalculated hashes for each track separately
 
 extract_features_analyzer = None
+
 
 def extract_features(track_obj, *args, **kwargs):
     """ Extract the audfprint fingerprint hashes for one file.
@@ -556,6 +555,7 @@ def extract_features(track_obj, *args, **kwargs):
 # Handy function to build a new hash table from a file glob pattern
 g2h_analyzer = None
 
+
 def glob2hashtable(pattern, density=20.0):
     """ Build a hash table from the files matching a glob pattern """
     global g2h_analyzer
@@ -573,9 +573,10 @@ def glob2hashtable(pattern, density=20.0):
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
-    print("Added", tothashes, "(", tothashes/float(totdur), "hashes/sec) at ",
-          elapsedtime/totdur, "x RT")
+    print("Added", tothashes, "(", tothashes / float(totdur), "hashes/sec) at ",
+          elapsedtime / totdur, "x RT")
     return ht
+
 
 def local_tester():
     test_fn = '/Users/dpwe/Downloads/carol11k.wav'
@@ -584,6 +585,7 @@ def local_tester():
 
     test_analyzer.ingest(test_ht, test_fn)
     test_ht.save('httest.pklz')
+
 
 # Run the test function if called from the command line
 if __name__ == "__main__":
