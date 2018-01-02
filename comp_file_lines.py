@@ -4,6 +4,7 @@
 #
 # Python script to count number of exact matching lines between two files, no edit distance
 # 2014-09-07 Dan Ellis dpwe@ee.columbia.edu
+from __future__ import print_function
 
 import sys
 
@@ -14,10 +15,10 @@ onefile = False
 if len(sys.argv) == 2:
     # Special case: if a single file, compare the first ws-separated field with remainder
     onefile = True
-    print "onefile true"
+    print("onefile true")
 
 elif len(sys.argv) < 3:
-    print "Usage:", sys.argv[0], "file1.txt file2.txt [verbose]"
+    print("Usage:", sys.argv[0], "file1.txt file2.txt [verbose]")
     sys.exit(1)
 
 file1 = sys.argv[1]
@@ -48,6 +49,6 @@ for ix, items in enumerate(zip(item1s, item2s)):
         correct[ix] = 1.0
     else:
         if verbose:
-            print items
+            print(items)
 
-print int(np.sum(correct)),"correct out of", len(correct), "= %.1f%%" % (100.0*np.mean(correct))
+print(int(np.sum(correct)),"correct out of", len(correct), "= %.1f%%" % (100.0*np.mean(correct)))

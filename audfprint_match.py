@@ -5,6 +5,7 @@ Fingerprint matching code for audfprint
 
 2014-05-26 Dan Ellis dpwe@ee.columbia.edu
 """
+from __future__ import print_function
 import librosa
 import numpy as np
 import scipy.signal
@@ -22,10 +23,10 @@ from scipy import stats
 
 def log(message):
     """ log info with stats """
-    print time.ctime(), \
-        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
-        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
-        message
+    print(time.ctime(),
+        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime,
+        message)
 
 def encpowerof2(val):
     """ Return N s.t. 2^N >= val """
@@ -345,9 +346,9 @@ class Matcher(object):
                 numberstring = "#%d"%number
             else:
                 numberstring = ""
-            print time.ctime(), "Analyzed", numberstring, filename, "of", \
-                  ('%.3f'%durd), "s " \
-                  "to", len(q_hashes), "hashes"
+            print(time.ctime(), "Analyzed", numberstring, filename, "of",
+                  ('%.3f'%durd), "s " 
+                  "to", len(q_hashes), "hashes")
         # Run query
         rslts = self.match_hashes(ht, q_hashes)
         # Post filtering
@@ -453,10 +454,10 @@ def localtest():
     rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
                                            hash_tab, qry)
     t_hop = 0.02322
-    print "Matched", qry, "(", dur, "s,", nhash, "hashes)", \
-          "as", hash_tab.names[rslts[0][0]], \
-          "at", t_hop*float(rslts[0][2]), "with", rslts[0][1], \
-          "of", rslts[0][3], "hashes"
+    print("Matched", qry, "(", dur, "s,", nhash, "hashes)",
+          "as", hash_tab.names[rslts[0][0]],
+          "at", t_hop*float(rslts[0][2]), "with", rslts[0][1],
+          "of", rslts[0][3], "hashes")
 
 # Run the main function if called from the command line
 if __name__ == "__main__":

@@ -10,10 +10,26 @@ from __future__ import print_function
 
 import numpy as np
 import random
-import cPickle as pickle
+
 import os, gzip
 import scipy.io
 import math
+try:
+    import cPickle as pickle  # Py2
+except ImportError:
+    import pickle  # Py3
+
+try:
+    # noinspection PyUnresolvedReferences
+    xrange(0)  # Py2
+except NameError:
+    xrange = range  # Py3
+
+try:
+    # noinspection PyUnresolvedReferences
+    basestring  # Py2
+except NameError:
+    basestring = (str, bytes)  # Py3
 
 # Current format version
 HT_VERSION = 20170724
@@ -262,7 +278,7 @@ class HashTable(object):
         self.counts = mht['HashTableCounts'][0]
         self.names = [str(val[0]) if len(val) > 0 else []
                       for val in mht['HashTableNames'][0]]
-        self.hashesperid = np.array(mht['HashTableLengths'][0]).astype(uint32)
+        self.hashesperid = np.array(mht['HashTableLengths'][0]).astype(np.uint32)
         # Matlab uses 1-origin for the IDs in the hashes, but the Python code
         # also skips using id_ 0, so that names[0] corresponds to id_ 1.
         # Otherwise unmodified database

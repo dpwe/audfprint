@@ -27,6 +27,12 @@ import librosa
 
 import audio_read
 
+try:
+    # noinspection PyUnresolvedReferences
+    xrange(0)  # Py2
+except NameError:
+    xrange = range  # Py3
+
 ################ Globals ################
 # Special extension indicating precomputed fingerprint
 PRECOMPEXT = '.afpt'

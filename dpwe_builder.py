@@ -19,13 +19,20 @@
 # ./AFP/database/000004.mp3
 # ...
 # The output file(s), which containing all the information of the database to be used for audio fingerprinting, should be placed placed into the directory %dir4db%. The total size of the database file(s) is restricted to a certain amount, as explained next.
+from __future__ import print_function
 
 import sys, os
 import audfprint
 
+try:
+    from ConfigParser import ConfigParser  # Py2
+except ImportError:
+    from configparser import ConfigParser  # Py3
+import errno
+
 config_file = None
 if len(sys.argv) < 2:
-    print "Usage:", sys.argv[0], "[-C config.txt] fileList4db dir4db"
+    print("Usage:", sys.argv[0], "[-C config.txt] fileList4db dir4db")
     sys.exit()
 
 else:
@@ -44,9 +51,7 @@ defaults = {'density': "70",
             'ncores': "8"}
 
 # Parse input file
-import ConfigParser
-import errno
-config = ConfigParser.ConfigParser(defaults)
+config = ConfigParser(defaults)
 section = 'dpwe_builder'
 config.add_section(section)
 
@@ -59,8 +64,8 @@ fanout = config.getint(section, 'fanout')
 bucketsize = config.getint(section, 'bucketsize')
 ncores = config.getint(section, 'ncores')
 
-print sys.argv[0], "density:", density, "fanout:", fanout, \
-    "bucketsize:", bucketsize, "ncores:", ncores
+print(sys.argv[0], "density:", density, "fanout:", fanout,
+      "bucketsize:", bucketsize, "ncores:", ncores)
 
 # Ensure the database directory exists
 audfprint.ensure_dir(dir4db)
