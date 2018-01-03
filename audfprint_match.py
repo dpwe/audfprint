@@ -6,7 +6,7 @@ Fingerprint matching code for audfprint
 
 2014-05-26 Dan Ellis dpwe@ee.columbia.edu
 """
-from __future__ import print_function
+from __future__ import division, print_function
 
 import resource  # for checking phys mem size
 import time
@@ -344,7 +344,7 @@ class Matcher(object):
         if len(q_hashes) == 0:
             durd = 0.0
         else:
-            durd = float(analyzer.n_hop * q_hashes[-1][0]) / analyzer.target_sr
+            durd = analyzer.n_hop * q_hashes[-1][0] / analyzer.target_sr
         if self.verbose:
             if number is not None:
                 numberstring = "#%d" % number
@@ -358,13 +358,13 @@ class Matcher(object):
         # Post filtering
         if self.sort_by_time:
             rslts = rslts[(-rslts[:, 2]).argsort(), :]
-        return (rslts[:self.max_returns, :], durd, len(q_hashes))
+        return rslts[:self.max_returns, :], durd, len(q_hashes)
 
     def file_match_to_msgs(self, analyzer, ht, qry, number=None):
         """ Perform a match on a single input file, return list
             of message strings """
         rslts, dur, nhash = self.match_file(analyzer, ht, qry, number)
-        t_hop = analyzer.n_hop / float(analyzer.target_sr)
+        t_hop = analyzer.n_hop / analyzer.target_sr
         if self.verbose:
             qrymsg = qry + (' %.1f ' % dur) + "sec " + str(nhash) + " raw hashes"
         else:

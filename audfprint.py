@@ -8,7 +8,7 @@ Port of the Matlab implementation.
 
 2014-05-25 Dan Ellis dpwe@ee.columbia.edu
 """
-from __future__ import print_function
+from __future__ import division, print_function
 
 import multiprocessing  # for new/add
 import os  # For command line interface
@@ -276,7 +276,7 @@ def setup_analyzer(args):
     # fixed - 512 pt FFT with 256 pt hop at 11025 Hz
     analyzer.target_sr = int(args['--samplerate'])
     analyzer.n_fft = 512
-    analyzer.n_hop = analyzer.n_fft / 2
+    analyzer.n_hop = analyzer.n_fft // 2
     # set default value for shifts depending on mode
     if analyzer.shifts == 0:
         # Default shift is 4 for match, otherwise 1

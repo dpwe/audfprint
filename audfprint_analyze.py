@@ -7,7 +7,7 @@ Class to do the analysis of wave files into hash constellations.
 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 """
 
-from __future__ import print_function
+from __future__ import division, print_function
 
 import glob  # For glob2hashtable, localtester
 import os
@@ -22,12 +22,12 @@ import audio_read
 import hash_table  # For utility, glob2hashtable
 
 try:
-    # noinspection PyUnresolvedReferences
+    # noinspection PyUnresolvedReferences,PyUnboundLocalVariable
     xrange(0)  # Py2
 except NameError:
     xrange = range  # Py3
 
-################ Globals ################
+# ############### Globals ############### #
 # Special extension indicating precomputed fingerprint
 PRECOMPEXT = '.afpt'
 # A different precomputed fingerprint is just the peaks
@@ -58,7 +58,7 @@ def locmax(vec, indices=False):
 DENSITY = 20.0
 # OVERSAMP > 1 tries to generate extra landmarks by decaying faster
 OVERSAMP = 1
-## 512 pt FFT @ 11025 Hz, 50% hop
+# 512 pt FFT @ 11025 Hz, 50% hop
 # t_win = 0.0464
 # t_hop = 0.0232
 # Just specify n_fft
@@ -187,7 +187,7 @@ class Analyzer(object):
             self.__sp_width = width
             self.__sp_len = npoints
             self.__sp_vals = np.exp(-0.5 * ((np.arange(-npoints, npoints + 1)
-                                             / float(width)) ** 2))
+                                             / width) ** 2))
         # Now the actual function
         for pos, val in peaks:
             vec = np.maximum(vec, val * self.__sp_vals[np.arange(npoints)
@@ -202,7 +202,7 @@ class Analyzer(object):
         sthresh = self.spreadpeaksinvector(
                 np.max(sgram[:, :np.minimum(10, scols)], axis=1), self.f_sd
         )
-        ## Store sthresh at each column, for debug
+        # Store sthresh at each column, for debug
         # thr = np.zeros((srows, scols))
         peaks = np.zeros((srows, scols))
         # optimization of mask update
@@ -272,8 +272,7 @@ class Analyzer(object):
             return []
 
         # masking envelope decay constant
-        a_dec = (1.0 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35.0)) \
-                ** (1.0 / OVERSAMP)
+        a_dec = (1 - 0.01 * (self.density * np.sqrt(self.n_hop / 352.8) / 35)) ** (1 / OVERSAMP)
         # Take spectrogram
         mywin = np.hanning(self.n_fft + 2)[1:-1]
         sgram = np.abs(librosa.stft(d, n_fft=self.n_fft,
@@ -290,8 +289,7 @@ class Analyzer(object):
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
         sgram = np.array([scipy.signal.lfilter([1, -1],
-                                               [1, -(HPF_POLE) ** \
-                                                    (1 / OVERSAMP)], s_row)
+                                               [1, -HPF_POLE ** (1 / OVERSAMP)], s_row)
                           for s_row in sgram])[:-1, ]
         # Prune to keep only local maxima in spectrum that appear above an online,
         # decaying threshold
@@ -303,8 +301,8 @@ class Analyzer(object):
         scols = np.shape(sgram)[1]
         pklist = []
         for col in xrange(scols):
-            for bin in np.nonzero(peaks[:, col])[0]:
-                pklist.append((col, bin))
+            for bin_ in np.nonzero(peaks[:, col])[0]:
+                pklist.append((col, bin_))
         return pklist
 
     def peaks2landmarks(self, pklist):
@@ -320,9 +318,9 @@ class Analyzer(object):
             # Find column of the final peak in the list
             scols = pklist[-1][0] + 1
             # Convert (col, bin) list into peaks_at[col] lists
-            peaks_at = [[] for col in xrange(scols)]
-            for (col, bin) in pklist:
-                peaks_at[col].append(bin)
+            peaks_at = [[] for _ in xrange(scols)]
+            for (col, bin_) in pklist:
+                peaks_at[col].append(bin_)
 
             # Build list of landmarks <starttime F1 endtime F2>
             for col in xrange(scols):
@@ -351,27 +349,28 @@ class Analyzer(object):
         if ext == PRECOMPPKEXT:
             # short-circuit - precomputed fingerprint file
             peaks = peaks_load(filename)
-            dur = np.max(peaks, axis=0)[0] * self.n_hop / float(self.target_sr)
+            dur = np.max(peaks, axis=0)[0] * self.n_hop / self.target_sr
         else:
             try:
                 # [d, sr] = librosa.load(filename, sr=self.target_sr)
                 d, sr = audio_read.audio_read(filename, sr=self.target_sr, channels=1)
-            except:  # audioread.NoBackendError:
+            except Exception as e:  # audioread.NoBackendError:
                 message = "wavfile2peaks: Error reading " + filename
                 if self.fail_on_error:
+                    print(e)
                     raise IOError(message)
                 print(message, "skipping")
                 d = []
                 sr = self.target_sr
             # Store duration in a global because it's hard to handle
-            dur = float(len(d)) / sr
+            dur = len(d) / sr
             if shifts is None or shifts < 2:
-                peaks = self.find_peaks(d, sr);
+                peaks = self.find_peaks(d, sr)
             else:
                 # Calculate hashes with optional part-frame shifts
                 peaklists = []
                 for shift in range(shifts):
-                    shiftsamps = int(float(shift) / self.shifts * self.n_hop)
+                    shiftsamps = int(shift / self.shifts * self.n_hop)
                     peaklists.append(self.find_peaks(d[shiftsamps:], sr))
                 peaks = peaklists
 
@@ -390,7 +389,7 @@ class Analyzer(object):
         if ext == PRECOMPEXT:
             # short-circuit - precomputed fingerprint file
             hashes = hashes_load(filename)
-            dur = np.max(hashes, axis=0)[0] * self.n_hop / float(self.target_sr)
+            dur = np.max(hashes, axis=0)[0] * self.n_hop / self.target_sr
             # instrumentation to track total amount of sound processed
             self.soundfiledur = dur
             self.soundfiletotaldur += dur
@@ -424,7 +423,7 @@ class Analyzer(object):
         # print("wavfile2hashes: read", len(hashes), "hashes from", filename)
         return hashes
 
-    ########### functions to link to actual hash table index database #######
+    # ########## functions to link to actual hash table index database ###### #
 
     def ingest(self, hashtable, filename):
         """ Read an audio file and add it to the database
@@ -456,13 +455,13 @@ class Analyzer(object):
         return self.soundfiledur, len(hashes)
 
 
-########### functions to read/write hashes to file for a single track #####
+# ########## functions to read/write hashes to file for a single track #### #
 
 # Format string for writing binary data to file
 HASH_FMT = '<2i'
-HASH_MAGIC = 'audfprinthashV00'  # 16 chars, FWIW
+HASH_MAGIC = b'audfprinthashV00'  # 16 chars, FWIW
 PEAK_FMT = '<2i'
-PEAK_MAGIC = 'audfprintpeakV00'  # 16 chars, FWIW
+PEAK_MAGIC = b'audfprintpeakV00'  # 16 chars, FWIW
 
 
 def hashes_save(hashfilename, hashes):
@@ -513,8 +512,8 @@ def peaks_load(peakfilename):
     return peaks
 
 
-######## function signature for Gordon feature extraction
-######## which stores the precalculated hashes for each track separately
+# ####### function signature for Gordon feature extraction
+# ####### which stores the precalculated hashes for each track separately
 
 extract_features_analyzer = None
 
@@ -530,7 +529,7 @@ def extract_features(track_obj, *args, **kwargs):
         The times (in frames) and hashes analyzed from the audio file.
     """
     global extract_features_analyzer
-    if extract_features_analyzer == None:
+    if extract_features_analyzer is None:
         extract_features_analyzer = Analyzer()
 
     density = None
@@ -559,7 +558,7 @@ g2h_analyzer = None
 def glob2hashtable(pattern, density=20.0):
     """ Build a hash table from the files matching a glob pattern """
     global g2h_analyzer
-    if g2h_analyzer == None:
+    if g2h_analyzer is None:
         g2h_analyzer = Analyzer(density=density)
 
     ht = hash_table.HashTable()
@@ -573,7 +572,7 @@ def glob2hashtable(pattern, density=20.0):
         totdur += dur
         tothashes += nhash
     elapsedtime = time.clock() - initticks
-    print("Added", tothashes, "(", tothashes / float(totdur), "hashes/sec) at ",
+    print("Added", tothashes, "(", tothashes / totdur, "hashes/sec) at ",
           elapsedtime / totdur, "x RT")
     return ht
 

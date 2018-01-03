@@ -7,7 +7,7 @@ used for the audfprint fingerprinter.
 
 2014-05-25 Dan Ellis dpwe@ee.columbia.edu
 """
-from __future__ import print_function
+from __future__ import division, print_function
 
 import gzip
 import math
