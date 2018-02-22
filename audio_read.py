@@ -1,8 +1,9 @@
+# coding=utf-8
 """audio_read reads in a whole audio file with resampling."""
 
 # Equivalent to:
-#import librosa
-#def audio_read(filename, sr=11025, channels=1):
+# import librosa
+# def audio_read(filename, sr=11025, channels=1):
 #    """Read a soundfile, return (d, sr)."""
 #    d, sr = librosa.load(filename, sr=sr, mono=(channels == 1))
 #    return d, sr
@@ -16,9 +17,22 @@
 # Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 #
 # THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+from __future__ import division
 
 import os
+import re
+import subprocess
+import threading
+import time
+
 import numpy as np
+
+try:
+    import queue
+except ImportError:
+    # noinspection PyUnresolvedReferences
+    import Queue as queue
+
 
 def audio_read(filename, sr=None, channels=None):
     """Read a soundfile, return (d, sr)."""
@@ -88,7 +102,7 @@ def buf_to_float(x, n_bytes=2, dtype=np.float32):
     """
 
     # Invert the scale of the data
-    scale = 1./float(1 << ((8 * n_bytes) - 1))
+    scale = 1. / float(1 << ((8 * n_bytes) - 1))
 
     # Construct the format string
     fmt = '<i{:d}'.format(n_bytes)
@@ -116,20 +130,11 @@ def buf_to_float(x, n_bytes=2, dtype=np.float32):
 # included in all copies or substantial portions of the Software.
 
 
-import subprocess
-import re
-import threading
-import time
-try:
-    import queue
-except ImportError:
-    import Queue as queue
-
-
 class QueueReaderThread(threading.Thread):
     """A thread that consumes data from a filehandle and sends the data
     over a Queue.
     """
+
     def __init__(self, fh, blocksize=1024, discard=False):
         super(QueueReaderThread, self).__init__()
         self.fh = fh
@@ -150,6 +155,7 @@ class QueueReaderThread(threading.Thread):
 
 class FFmpegAudioFile(object):
     """An audio file decoded by the ffmpeg command-line utility."""
+
     def __init__(self, filename, channels=None, sample_rate=None, block_size=4096):
         if not os.path.isfile(filename):
             raise ValueError(filename + " not found.")
@@ -162,8 +168,8 @@ class FFmpegAudioFile(object):
             popen_args.extend(['-ar', str(sample_rate)])
         popen_args.append('-')
         self.proc = subprocess.Popen(
-            popen_args,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                popen_args,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
 
         # Start another thread to consume the standard output of the
@@ -206,7 +212,7 @@ class FFmpegAudioFile(object):
                         # Nothing interesting has happened for a while --
                         # FFmpeg is probably hanging.
                         raise ValueError('ffmpeg output: {}'.format(
-                            ''.join(self.stderr_reader.queue.queue)
+                                ''.join(self.stderr_reader.queue.queue)
                         ))
                     else:
                         start_time = end_time
@@ -233,7 +239,7 @@ class FFmpegAudioFile(object):
             if 'no such file' in line:
                 raise IOError('file not found')
             elif 'invalid data found' in line:
-                raise UnsupportedError()
+                raise ValueError()
             elif 'duration:' in line:
                 out_parts.append(line)
             elif 'audio:' in line:
@@ -273,15 +279,15 @@ class FFmpegAudioFile(object):
 
         # Duration.
         match = re.search(
-            r'duration: (\d+):(\d+):(\d+).(\d)', s
+                r'duration: (\d+):(\d+):(\d+).(\d)', s
         )
         if match:
             durparts = list(map(int, match.groups()))
             duration = (
-                durparts[0] * 60 * 60 +
-                durparts[1] * 60 +
-                durparts[2] +
-                float(durparts[3]) / 10
+                    durparts[0] * 60 * 60 +
+                    durparts[1] * 60 +
+                    durparts[2] +
+                    float(durparts[3]) / 10
             )
             self.duration = duration
         else:

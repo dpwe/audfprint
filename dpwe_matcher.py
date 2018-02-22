@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 # dpwe_matcher.py
 #
@@ -25,13 +26,23 @@
 # ./AFP/query/q000002.wav	./AFP/database/0000054.mp3
 # ./AFP/query/q000003.wav	./AFP/database/0001002.mp3
 # ..
+from __future__ import print_function
 
-import sys, os
+import os
+import sys
+
 import audfprint
+
+try:
+    # noinspection PyCompatibility
+    from ConfigParser import ConfigParser  # Py2
+except ImportError:
+    from configparser import ConfigParser  # Py3
+import errno
 
 config_file = None
 if len(sys.argv) < 2:
-    print "Usage:", sys.argv[0], "[-C config.txt] fileList4query dir4db resultFile"
+    print("Usage:", sys.argv[0], "[-C config.txt] fileList4query dir4db resultFile")
     sys.exit()
 
 else:
@@ -53,8 +64,7 @@ defaults = {'density': "70",
             'ncores': "8"}
 
 # Parse input file
-import ConfigParser
-config = ConfigParser.ConfigParser(defaults)
+config = ConfigParser(defaults)
 section = 'dpwe_matcher'
 
 config.add_section(section)
@@ -69,9 +79,9 @@ search_depth = config.getint(section, 'search_depth')
 min_count = config.getint(section, 'min_count')
 ncores = config.getint(section, 'ncores')
 
-print sys.argv[0], "density:", density, "fanout:", fanout, \
-    "search_depth", search_depth, "min_count", min_count, \
-    "ncores:", ncores
+print(sys.argv[0], "density:", density, "fanout:", fanout,
+      "search_depth", search_depth, "min_count", min_count,
+      "ncores:", ncores)
 
 # Run the command
 argv = ["audfprint", "match",

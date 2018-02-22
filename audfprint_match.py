@@ -1,3 +1,4 @@
+# coding=utf-8
 """
 audfprint_match.py
 
@@ -5,31 +6,32 @@ Fingerprint matching code for audfprint
 
 2014-05-26 Dan Ellis dpwe@ee.columbia.edu
 """
+from __future__ import division, print_function
+
+import resource  # for checking phys mem size
+import time
+
 import librosa
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal
 
-import time
-# for checking phys mem size
-import resource
-# for localtest and illustrate
-import audfprint_analyze
-import matplotlib.pyplot as plt
-
+import audfprint_analyze  # for localtest and illustrate
 import audio_read
 
-from scipy import stats
 
 def log(message):
     """ log info with stats """
-    print time.ctime(), \
-        "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, \
-        "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime, \
-        message
+    print(time.ctime(),
+          "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+          "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime,
+          message)
+
 
 def encpowerof2(val):
     """ Return N s.t. 2^N >= val """
-    return int(np.ceil(np.log(max(1, val))/np.log(2)))
+    return int(np.ceil(np.log(max(1, val)) / np.log(2)))
+
 
 def locmax(vec, indices=False):
     """ Return a boolean vector of which points in vec are local maxima.
@@ -38,9 +40,9 @@ def locmax(vec, indices=False):
         of the boolean vector. (originally from audfprint.py)
     """
     # x[-1]-1 means last value can be a peak
-    #nbr = np.greater_equal(np.r_[x, x[-1]-1], np.r_[x[0], x])
+    # nbr = np.greater_equal(np.r_[x, x[-1]-1], np.r_[x[0], x])
     # the np.r_ was killing us, so try an optimization...
-    nbr = np.zeros(len(vec)+1, dtype=bool)
+    nbr = np.zeros(len(vec) + 1, dtype=bool)
     nbr[0] = True
     nbr[1:-1] = np.greater_equal(vec[1:], vec[:-1])
     maxmask = (nbr[:-1] & ~nbr[1:])
@@ -49,12 +51,14 @@ def locmax(vec, indices=False):
     else:
         return maxmask
 
+
 def keep_local_maxes(vec):
     """ Zero out values unless they are local maxima."""
     local_maxes = np.zeros(vec.shape)
     locmaxindices = locmax(vec, indices=True)
     local_maxes[locmaxindices] = vec[locmaxindices]
     return local_maxes
+
 
 def find_modes(data, threshold=5, window=0):
     """ Find multiple modes in data,  Report a list of (mode, count)
@@ -69,6 +73,7 @@ def find_modes(data, threshold=5, window=0):
                                            np.greater_equal(fullvector,
                                                             threshold)))[0]
     return localmaxes + datamin, fullvector[localmaxes]
+
 
 class Matcher(object):
     """Provide matching for audfprint fingerprint queries to hash table"""
@@ -107,13 +112,13 @@ class Matcher(object):
             with rows of consisting of [id dtime hash otime] """
         allids = hits[:, 0]
         ids = np.unique(allids)
-        #rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
+        # rawcounts = np.sum(np.equal.outer(ids, allids), axis=1)
         # much faster, and doesn't explode memory
         rawcounts = np.bincount(allids)[ids]
         # Divide the raw counts by the total number of hashes stored
         # for the ref track, to downweight large numbers of chance
         # matches against longer reference tracks.
-        wtdcounts = rawcounts/(ht.hashesperid[ids].astype(float))
+        wtdcounts = rawcounts / (ht.hashesperid[ids].astype(float))
 
         # Find all the actual hits for a the most popular ids
         bestcountsixs = np.argsort(wtdcounts)[::-1]
@@ -138,11 +143,11 @@ class Matcher(object):
         # matchhashes may include repeats because multiple
         # ref hashes may match a single query hash under window.
         # Uniqify:
-        #matchhashes = sorted(list(set(matchhashes)))
+        # matchhashes = sorted(list(set(matchhashes)))
         # much, much faster:
         matchix = np.nonzero(
-            np.logical_and(allids == id, np.less_equal(np.abs(alltimes - mode),
-                                                       self.window)))[0]
+                np.logical_and(allids == id, np.less_equal(np.abs(alltimes - mode),
+                                                           self.window)))[0]
         matchhasheshash = np.unique(allotimes[matchix]
                                     + (allhashes[matchix] << timebits))
         timemask = (1 << timebits) - 1
@@ -156,15 +161,15 @@ class Matcher(object):
            which must be sorted in orig_time order."""
         minoffset = mode - self.window
         maxoffset = mode + self.window
-        #match_times = sorted(hits[row, 3]
+        # match_times = sorted(hits[row, 3]
         #                     for row in np.nonzero(hits[:, 0]==id)[0]
         #                     if mode - self.window <= hits[row, 1]
         #                     and hits[row, 1] <= mode + self.window)
         match_times = hits[np.logical_and(hits[:, 1] >= minoffset,
                                           hits[:, 1] <= maxoffset), 3]
-        min_time = match_times[int(len(match_times)*self.time_quantile)]
-        max_time = match_times[int(len(match_times)*(1.0 - self.time_quantile)) - 1]
-        #log("_calc_time_ranges: len(hits)={:d} id={:d} mode={:d} matches={:d} min={:d} max={:d}".format(
+        min_time = match_times[int(len(match_times) * self.time_quantile)]
+        max_time = match_times[int(len(match_times) * (1.0 - self.time_quantile)) - 1]
+        # log("_calc_time_ranges: len(hits)={:d} id={:d} mode={:d} matches={:d} min={:d} max={:d}".format(
         #    len(hits), id, mode, np.sum(np.logical_and(hits[:, 1] >= minoffset,
         #                                               hits[:, 1] <= maxoffset)),
         #    min_time, max_time))
@@ -187,7 +192,7 @@ class Matcher(object):
         allids = sorted_hits[:, 0]
         alltimes = sorted_hits[:, 1]
         allhashes = sorted_hits[:, 2]
-        #allotimes = sorted_hits[:, 3]
+        # allotimes = sorted_hits[:, 3]
         # Allocate enough space initially for 4 modes per hit
         maxnresults = len(ids) * 4
         results = np.zeros((maxnresults, 7), np.int32)
@@ -195,7 +200,7 @@ class Matcher(object):
         min_time = 0
         max_time = 0
         for urank, (id, rawcount) in enumerate(zip(ids, rawcounts)):
-            modes, counts = find_modes(alltimes[np.nonzero(allids==id)[0]],
+            modes, counts = find_modes(alltimes[np.nonzero(allids == id)[0]],
                                        window=self.window,
                                        threshold=self.threshcount)
             for mode in modes:
@@ -209,7 +214,7 @@ class Matcher(object):
                         results.resize((maxnresults, results.shape[1]))
                     if self.find_time_range:
                         min_time, max_time = self._calculate_time_ranges(
-                            sorted_hits, id, mode)
+                                sorted_hits, id, mode)
                     results[nresults, :] = [id, filtcount, mode, rawcount,
                                             urank, min_time, max_time]
                     nresults += 1
@@ -258,7 +263,7 @@ class Matcher(object):
             # Make sure id is an int64 before shifting it up.
             id = int(id)
             # Select the subrange of bincounts corresponding to this id
-            bincounts = np.bincount(alltimes[allids==id])
+            bincounts = np.bincount(alltimes[allids == id])
             still_looking = True
             # Only consider legit local maxima in bincounts.
             filtered_bincounts = keep_local_maxes(bincounts)
@@ -269,11 +274,11 @@ class Matcher(object):
                     # Too few - skip to the next id
                     still_looking = False
                     continue
-                count = np.sum(bincounts[max(0, mode - self.window) :
+                count = np.sum(bincounts[max(0, mode - self.window):
                                          (mode + self.window + 1)])
                 if self.find_time_range:
                     min_time, max_time = self._calculate_time_ranges(
-                        sorted_hits, id, mode + mintime)
+                            sorted_hits, id, mode + mintime)
                 results[nresults, :] = [id, count, mode + mintime, rawcount,
                                         urank, min_time, max_time]
                 nresults += 1
@@ -296,12 +301,12 @@ class Matcher(object):
             hit (0=top hit).
         """
         # find the implicated id, time pairs from hash table
-        #log("nhashes=%d" % np.shape(hashes)[0])
+        # log("nhashes=%d" % np.shape(hashes)[0])
         hits = ht.get_hits(hashes)
 
         bestids, rawcounts = self._best_count_ids(hits, ht)
 
-        #log("len(rawcounts)=%d max(rawcounts)=%d" %
+        # log("len(rawcounts)=%d max(rawcounts)=%d" %
         #    (len(rawcounts), max(rawcounts)))
         if not self.exact_count:
             results = self._approx_match_counts(hits, bestids, rawcounts)
@@ -309,16 +314,16 @@ class Matcher(object):
             results = self._exact_match_counts(hits, bestids, rawcounts,
                                                hashesfor)
         # Sort results by filtered count, descending
-        results = results[(-results[:,1]).argsort(),]
+        results = results[(-results[:, 1]).argsort(),]
         # Where was our best hit in the unfiltered count ranking?
         # (4th column is rank in original list; look at top hit)
-        #if np.shape(results)[0] > 0:
+        # if np.shape(results)[0] > 0:
         #    bestpos = results[0, 4]
         #    print "bestpos =", bestpos
         # Could use to collect stats on best search-depth to use...
 
         # Now strip the final column (original raw-count-based rank)
-        #results = results[:, :4]
+        # results = results[:, :4]
 
         if hashesfor is None:
             return results
@@ -339,29 +344,29 @@ class Matcher(object):
         if len(q_hashes) == 0:
             durd = 0.0
         else:
-            durd = float(analyzer.n_hop * q_hashes[-1][0])/analyzer.target_sr
+            durd = analyzer.n_hop * q_hashes[-1][0] / analyzer.target_sr
         if self.verbose:
             if number is not None:
-                numberstring = "#%d"%number
+                numberstring = "#%d" % number
             else:
                 numberstring = ""
-            print time.ctime(), "Analyzed", numberstring, filename, "of", \
-                  ('%.3f'%durd), "s " \
-                  "to", len(q_hashes), "hashes"
+            print(time.ctime(), "Analyzed", numberstring, filename, "of",
+                  ('%.3f' % durd), "s "
+                                   "to", len(q_hashes), "hashes")
         # Run query
         rslts = self.match_hashes(ht, q_hashes)
         # Post filtering
         if self.sort_by_time:
             rslts = rslts[(-rslts[:, 2]).argsort(), :]
-        return (rslts[:self.max_returns, :], durd, len(q_hashes))
+        return rslts[:self.max_returns, :], durd, len(q_hashes)
 
     def file_match_to_msgs(self, analyzer, ht, qry, number=None):
         """ Perform a match on a single input file, return list
             of message strings """
         rslts, dur, nhash = self.match_file(analyzer, ht, qry, number)
-        t_hop = analyzer.n_hop/float(analyzer.target_sr)
+        t_hop = analyzer.n_hop / analyzer.target_sr
         if self.verbose:
-            qrymsg = qry + (' %.1f '%dur) + "sec " + str(nhash) + " raw hashes"
+            qrymsg = qry + (' %.1f ' % dur) + "sec " + str(nhash) + " raw hashes"
         else:
             qrymsg = qry
 
@@ -370,9 +375,9 @@ class Matcher(object):
             # No matches returned at all
             nhashaligned = 0
             if self.verbose:
-                msgrslt.append("NOMATCH "+qrymsg)
+                msgrslt.append("NOMATCH " + qrymsg)
             else:
-                msgrslt.append(qrymsg+"\t")
+                msgrslt.append(qrymsg + "\t")
         else:
             for (tophitid, nhashaligned, aligntime, nhashraw, rank,
                  min_time, max_time) in rslts:
@@ -381,14 +386,14 @@ class Matcher(object):
                     if self.find_time_range:
                         msg = ("Matched {:6.1f} s starting at {:6.1f} s in {:s}"
                                " to time {:6.1f} s in {:s}").format(
-                            (max_time - min_time)*t_hop, min_time*t_hop, qry,
-                            (min_time + aligntime)*t_hop, ht.names[tophitid])
+                                (max_time - min_time) * t_hop, min_time * t_hop, qry,
+                                (min_time + aligntime) * t_hop, ht.names[tophitid])
                     else:
                         msg = "Matched {:s} as {:s} at {:6.1f} s".format(
-                            qrymsg, ht.names[tophitid], aligntime*t_hop)
+                                qrymsg, ht.names[tophitid], aligntime * t_hop)
                     msg += (" with {:5d} of {:5d} common hashes"
                             " at rank {:2d}").format(
-                        nhashaligned, nhashraw, rank)
+                            nhashaligned, nhashraw, rank)
                     msgrslt.append(msg)
                 else:
                     msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
@@ -400,12 +405,12 @@ class Matcher(object):
         """ Show the query fingerprints and the matching ones
             plotted over a spectrogram """
         # Make the spectrogram
-        #d, sr = librosa.load(filename, sr=analyzer.target_sr)
+        # d, sr = librosa.load(filename, sr=analyzer.target_sr)
         d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr, channels=1)
         sgram = np.abs(librosa.stft(d, n_fft=analyzer.n_fft,
                                     hop_length=analyzer.n_hop,
-                                    window=np.hanning(analyzer.n_fft+2)[1:-1]))
-        sgram = 20.0*np.log10(np.maximum(sgram, np.max(sgram)/1e6))
+                                    window=np.hanning(analyzer.n_fft + 2)[1:-1]))
+        sgram = 20.0 * np.log10(np.maximum(sgram, np.max(sgram) / 1e6))
         sgram = sgram - np.mean(sgram)
         # High-pass filter onset emphasis
         # [:-1,] discards top bin (nyquist) of sgram so bins fit in 8 bits
@@ -414,7 +419,7 @@ class Matcher(object):
             HPF_POLE = 0.98
             sgram = np.array([scipy.signal.lfilter([1, -1],
                                                    [1, -HPF_POLE], s_row)
-                              for s_row in sgram])[:-1,]
+                              for s_row in sgram])[:-1, ]
         sgram = sgram - np.max(sgram)
         librosa.display.specshow(sgram, sr=sr, hop_length=analyzer.n_hop,
                                  y_axis='linear', x_axis='time',
@@ -429,10 +434,10 @@ class Matcher(object):
         lms = audfprint_analyze.hashes2landmarks(q_hashes)
         mlms = audfprint_analyze.hashes2landmarks(matchhashes)
         # Overplot on the spectrogram
-        plt.plot(np.array([[x[0], x[0]+x[3]] for x in lms]).T,
+        plt.plot(np.array([[x[0], x[0] + x[3]] for x in lms]).T,
                  np.array([[x[1], x[2]] for x in lms]).T,
                  '.-g')
-        plt.plot(np.array([[x[0], x[0]+x[3]] for x in mlms]).T,
+        plt.plot(np.array([[x[0], x[0] + x[3]] for x in mlms]).T,
                  np.array([[x[1], x[2]] for x in mlms]).T,
                  '.-r')
         # Add title
@@ -444,6 +449,7 @@ class Matcher(object):
         # Return
         return results
 
+
 def localtest():
     """Function to provide quick test"""
     pat = '/Users/dpwe/projects/shazam/Nine_Lives/*mp3'
@@ -453,10 +459,11 @@ def localtest():
     rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
                                            hash_tab, qry)
     t_hop = 0.02322
-    print "Matched", qry, "(", dur, "s,", nhash, "hashes)", \
-          "as", hash_tab.names[rslts[0][0]], \
-          "at", t_hop*float(rslts[0][2]), "with", rslts[0][1], \
-          "of", rslts[0][3], "hashes"
+    print("Matched", qry, "(", dur, "s,", nhash, "hashes)",
+          "as", hash_tab.names[rslts[0][0]],
+          "at", t_hop * float(rslts[0][2]), "with", rslts[0][1],
+          "of", rslts[0][3], "hashes")
+
 
 # Run the main function if called from the command line
 if __name__ == "__main__":
