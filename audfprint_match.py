@@ -7,12 +7,12 @@ Fingerprint matching code for audfprint
 2014-05-26 Dan Ellis dpwe@ee.columbia.edu
 """
 from __future__ import division, print_function
-
-import resource  # for checking phys mem size
+import os
 import time
 
-import librosa
+import psutil
 import matplotlib.pyplot as plt
+import librosa
 import numpy as np
 import scipy.signal
 
@@ -20,12 +20,21 @@ import audfprint_analyze  # for localtest and illustrate
 import audio_read
 
 
+def process_info():
+    rss = usrtime = 0
+    p = psutil.Process(os.getpid())
+    if os.name == 'nt':
+        rss = p.memory_info()[0]
+        usrtime = p.cpu_times()[0]
+    else:
+        rss = p.get_memory_info()[0]
+        usrtime = p.get_cpu_times()[0]
+    return rss, usrtime
+
+
 def log(message):
     """ log info with stats """
-    print(time.ctime(),
-          "physmem=", resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-          "utime=", resource.getrusage(resource.RUSAGE_SELF).ru_utime,
-          message)
+    print('%s physmem=%s utime=%s %s' % (time.ctime(), process_info()))
 
 
 def encpowerof2(val):

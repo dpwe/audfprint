@@ -52,13 +52,8 @@ Options:
   --help                          Print this message
 ```
 
-Uses librosa, get https://github.com/bmcfee/librosa or "pip install librosa"
-
-Uses docopt, see http://docopt.org , get https://github.com/docopt/docopt or "pip install docopt"
-
-Also uses numpy and scipy, which need to be installed, e.g. "pip install numpy", "pip install scipy".
-
-Parallel processing relies on joblib module (and multiprocessing module), which are likely already installed.
+audfprint require some packages You can install them with.
+```pip install -r requirements.txt```
 
 This version uses `ffmpeg` to read input files.  You must have a working `ffmpeg` binary in your path (try `ffmpeg -V` at the command prompt).
 
