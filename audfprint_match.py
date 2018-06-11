@@ -13,6 +13,7 @@ import time
 import psutil
 import matplotlib.pyplot as plt
 import librosa
+import librosa.display
 import numpy as np
 import scipy.signal
 
