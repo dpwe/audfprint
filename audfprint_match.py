@@ -175,8 +175,11 @@ class Matcher(object):
         #                     for row in np.nonzero(hits[:, 0]==id)[0]
         #                     if mode - self.window <= hits[row, 1]
         #                     and hits[row, 1] <= mode + self.window)
-        match_times = hits[np.logical_and(hits[:, 1] >= minoffset,
-                                          hits[:, 1] <= maxoffset), 3]
+        match_times = hits[np.logical_and.reduce([
+            hits[:, 1] >= minoffset,
+            hits[:, 1] <= maxoffset,
+            hits[:, 0] == id
+        ]), 3]
         min_time = match_times[int(len(match_times) * self.time_quantile)]
         max_time = match_times[int(len(match_times) * (1.0 - self.time_quantile)) - 1]
         # log("_calc_time_ranges: len(hits)={:d} id={:d} mode={:d} matches={:d} min={:d} max={:d}".format(
