@@ -1,7 +1,10 @@
 # audfprint/python/Makefile
 #
 # This is just to test the python version of audfprint by running each command,
-# in both single proc and multiproc mode
+# in both single proc and multiproc mode.
+#
+# You can test python3 compatibility with calls such as:
+# make test_onecore AUDFPRINT="python3 audfprint.py --density 100 --skip-existing"
 #
 # 2014-09-20 Dan Ellis dpwe@ee.columbia.edu
 
