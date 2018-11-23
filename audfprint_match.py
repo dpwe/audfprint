@@ -11,15 +11,19 @@ import os
 import time
 
 import psutil
-import matplotlib.pyplot as plt
-import librosa
-import librosa.display
 import numpy as np
 import scipy.signal
 
+# Don't sweat failure to import graphics support.
+try:
+    import matplotlib.pyplot as plt
+    import librosa.display
+except:
+    pass
+
 import audfprint_analyze  # for localtest and illustrate
 import audio_read
-
+import stft
 
 def process_info():
     rss = usrtime = 0
@@ -420,9 +424,9 @@ class Matcher(object):
         # Make the spectrogram
         # d, sr = librosa.load(filename, sr=analyzer.target_sr)
         d, sr = audio_read.audio_read(filename, sr=analyzer.target_sr, channels=1)
-        sgram = np.abs(librosa.stft(d, n_fft=analyzer.n_fft,
-                                    hop_length=analyzer.n_hop,
-                                    window=np.hanning(analyzer.n_fft + 2)[1:-1]))
+        sgram = np.abs(stft.stft(d, n_fft=analyzer.n_fft,
+                                 hop_length=analyzer.n_hop,
+                                 window=np.hanning(analyzer.n_fft + 2)[1:-1]))
         sgram = 20.0 * np.log10(np.maximum(sgram, np.max(sgram) / 1e6))
         sgram = sgram - np.mean(sgram)
         # High-pass filter onset emphasis

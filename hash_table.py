@@ -13,26 +13,21 @@ import gzip
 import math
 import os
 import random
+import sys
 
 import numpy as np
 import scipy.io
 
-try:
-    import cPickle as pickle  # Py2
-except ImportError:
+if sys.version_info[0] >= 3:
+    # Python 3 specific definitions
     import pickle  # Py3
-
-try:
-    # noinspection PyUnresolvedReferences,PyUnboundLocalVariable
-    xrange(0)  # Py2
-except NameError:
-    xrange = range  # Py3
-
-try:
-    # noinspection PyUnresolvedReferences,PyUnboundLocalVariable
-    basestring  # Py2
-except NameError:
     basestring = (str, bytes)  # Py3
+    pickle_options = {'encoding': 'latin1'}
+else:
+    # Python 2 specific definitions
+    import cPickle as pickle  # Py2
+    pickle_options = {}
+
 
 # Current format version
 HT_VERSION = 20170724
@@ -164,7 +159,7 @@ class HashTable(object):
         maxtimemask = (1 << self.maxtimebits) - 1
         hashmask = (1 << self.hashbits) - 1
         # Fill in
-        for ix in xrange(nhashes):
+        for ix in range(nhashes):
             time_ = hashes[ix][0]
             hash_ = hashmask & hashes[ix][1]
             nids = min(self.depth, self.counts[hash_])
@@ -221,7 +216,7 @@ class HashTable(object):
             f = file_object
         else:
             f = gzip.open(name, 'rb')
-        temp = pickle.load(f)
+        temp = pickle.load(f, **pickle_options)
         if temp.ht_version < HT_OLD_COMPAT_VERSION:
             raise ValueError('Version of ' + name + ' is ' + str(temp.ht_version)
                              + ' which is not at least ' +
