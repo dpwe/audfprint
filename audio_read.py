@@ -26,6 +26,9 @@ import threading
 import time
 
 import numpy as np
+# For wavread fallback.
+import scipy.io.wavfile as wav
+
 
 try:
     import queue
@@ -34,7 +37,38 @@ except ImportError:
     import Queue as queue
 
 
+# If ffmpeg is unavailable, you can set HAVE_FFMPEG to False which will cause
+# soundfile reads to go via scipy.io.wavfile.  However, this means that only
+# *.wav files are supported *and* they must already be resampled to the 
+# system sampling rate (e.g. 11025 Hz).
+
+HAVE_FFMPEG = True
+
+def wavread(filename):
+  """Read in audio data from a wav file.  Return d, sr."""
+  # Read in wav file.
+  samplerate, wave_data = wav.read(filename)
+  # Normalize short ints to floats in range [-1..1).
+  data = np.asfarray(wave_data) / 32768.0
+  return data, samplerate
+
+
 def audio_read(filename, sr=None, channels=None):
+    """Read a soundfile, return (d, sr)."""
+    if HAVE_FFMPEG:
+        return audio_read_ffmpeg(filename, sr, channels)
+    else:
+        data, samplerate = wavread(filename)
+        if channels == 1 and len(data.shape) == 2 and data.shape[-1] != 1:
+            # Convert stereo to mono.
+            data = np.mean(data, axis=-1)
+        if sr and sr != samplerate:
+            raise ValueError("Wav file has samplerate %f but %f requested." % (
+                samplerate, sr))
+        return data, samplerate
+
+
+def audio_read_ffmpeg(filename, sr=None, channels=None):
     """Read a soundfile, return (d, sr)."""
     # Hacked version of librosa.load and audioread/ff.
     offset = 0.0
