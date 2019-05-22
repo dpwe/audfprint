@@ -10,17 +10,23 @@ Port of the Matlab implementation.
 """
 from __future__ import division, print_function
 
-import multiprocessing  # for new/add
-import os  # For command line interface
-import sys  # For __main__
-import time  # For reporting progress time
+# For reporting progress time
+import time
+# For command line interface
+import docopt
+import os
+# For __main__
+import sys
+# For multiprocessing options
+import multiprocessing
+import joblib
 
-import docopt  # For command line interface
-import joblib  # for match
-
-import audfprint_analyze  # The actual analyzer class/code
-import audfprint_match  # Access to match functions, used in command line interface
-import hash_table  # My hash_table implementation
+# The actual analyzer class/code
+import audfprint_analyze
+# Access to match functions, used in command line interface
+import audfprint_match
+# My hash_table implementation
+import hash_table
 
 
 if sys.version_info[0] >= 3:
@@ -413,13 +419,13 @@ def main(argv):
 
     # Setup the analyzer if we're using one (i.e., unless "merge")
     analyzer = setup_analyzer(args) if not (
-            cmd is "merge" or cmd is "newmerge"
-            or cmd is "list" or cmd is "remove") else None
+            cmd == "merge" or cmd == "newmerge"
+            or cmd == "list" or cmd == "remove") else None
 
     precomp_type = 'hashes'
 
     # Set up the hash table, if we're using one (i.e., unless "precompute")
-    if cmd is not "precompute":
+    if cmd != "precompute":
         # For everything other than precompute, we need a database name
         # Check we have one
         dbasename = args['--dbase']

@@ -39,7 +39,7 @@ except ImportError:
 
 # If ffmpeg is unavailable, you can set HAVE_FFMPEG to False which will cause
 # soundfile reads to go via scipy.io.wavfile.  However, this means that only
-# *.wav files are supported *and* they must already be resampled to the 
+# *.wav files are supported *and* they must already be resampled to the
 # system sampling rate (e.g. 11025 Hz).
 
 HAVE_FFMPEG = True

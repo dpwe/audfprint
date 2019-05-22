@@ -9,18 +9,22 @@ Class to do the analysis of wave files into hash constellations.
 
 from __future__ import division, print_function
 
-import glob  # For glob2hashtable, localtester
 import os
-import struct  # For reading/writing hashes to file
-import time  # For glob2hashtable, localtester
-
 import numpy as np
+
 import scipy.signal
 
-import audio_read
-import hash_table  # For utility, glob2hashtable
-import stft
+# For reading/writing hashes to file
+import struct
 
+# For glob2hashtable, localtester
+import glob
+import time
+
+import audio_read
+# For utility, glob2hashtable
+import hash_table
+import stft
 
 # ############### Globals ############### #
 # Special extension indicating precomputed fingerprint
@@ -80,6 +84,9 @@ def landmarks2hashes(landmarks):
     the three remaining values.
     """
     landmarks = np.array(landmarks)
+    # Deal with special case of empty landmarks.
+    if landmarks.shape[0] == 0:
+      return np.zeros((0, 2), dtype=np.int32)
     hashes = np.zeros((landmarks.shape[0], 2), dtype=np.int32)
     hashes[:, 0] = landmarks[:, 0]
     hashes[:, 1] = (((landmarks[:, 1] & B1_MASK) << B1_SHIFT)
@@ -182,7 +189,7 @@ class Analyzer(object):
             self.__sp_width = width
             self.__sp_len = npoints
             self.__sp_vals = np.exp(-0.5 * ((np.arange(-npoints, npoints + 1)
-                                             / width) ** 2))
+                                             / width)**2))
         # Now the actual function
         for pos, val in peaks:
             vec = np.maximum(vec, val * self.__sp_vals[np.arange(npoints)
@@ -195,7 +202,7 @@ class Analyzer(object):
         """
         (srows, scols) = np.shape(sgram)
         sthresh = self.spreadpeaksinvector(
-                np.max(sgram[:, :np.minimum(10, scols)], axis=1), self.f_sd
+            np.max(sgram[:, :np.minimum(10, scols)], axis=1), self.f_sd
         )
         # Store sthresh at each column, for debug
         # thr = np.zeros((srows, scols))
@@ -399,7 +406,7 @@ class Analyzer(object):
                 query_hashes = []
                 for peaklist in peaklists:
                     query_hashes.append(landmarks2hashes(
-                            self.peaks2landmarks(peaklist)))
+                        self.peaks2landmarks(peaklist)))
                 query_hashes = np.concatenate(query_hashes)
             else:
                 query_hashes = landmarks2hashes(self.peaks2landmarks(peaks))

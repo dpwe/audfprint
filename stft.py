@@ -1,6 +1,6 @@
-"""Provide stft to avoid librosa dependency. 
+"""Provide stft to avoid librosa dependency.
 
-This implementation is based on routines from 
+This implementation is based on routines from
 https://github.com/tensorflow/models/blob/master/research/audioset/mel_features.py
 """
 
@@ -71,8 +71,8 @@ def stft(signal, n_fft, hop_length=None, window=None):
       values.  Defaults to n_fft.
 
   Returns:
-    2D np.array where each column contains the complex values of the 
-    fft_length/2+1 unique values of the FFT for the corresponding frame of 
+    2D np.array where each column contains the complex values of the
+    fft_length/2+1 unique values of the FFT for the corresponding frame of
     input samples ("spectrogram transposition").
   """
   if window is None:

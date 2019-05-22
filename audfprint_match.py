@@ -21,9 +21,10 @@ try:
 except:
     pass
 
-import audfprint_analyze  # for localtest and illustrate
+import audfprint_analyze
 import audio_read
 import stft
+
 
 def process_info():
     rss = usrtime = 0
