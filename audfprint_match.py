@@ -452,11 +452,13 @@ class Matcher(object):
         lms = audfprint_analyze.hashes2landmarks(q_hashes)
         mlms = audfprint_analyze.hashes2landmarks(matchhashes)
         # Overplot on the spectrogram
-        plt.plot(np.array([[x[0], x[0] + x[3]] for x in lms]).T,
-                 np.array([[x[1], x[2]] for x in lms]).T,
+        time_scale = analyzer.n_hop / float(sr)
+        freq_scale = float(sr)/analyzer.n_fft
+        plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in lms]).T,
+                 freq_scale * np.array([[x[1], x[2]] for x in lms]).T,
                  '.-g')
-        plt.plot(np.array([[x[0], x[0] + x[3]] for x in mlms]).T,
-                 np.array([[x[1], x[2]] for x in mlms]).T,
+        plt.plot(time_scale * np.array([[x[0], x[0] + x[3]] for x in mlms]).T,
+                 freq_scale * np.array([[x[1], x[2]] for x in mlms]).T,
                  '.-r')
         # Add title
         plt.title(filename + " : Matched as " + ht.names[results[0][0]]
